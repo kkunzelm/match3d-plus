@@ -42,11 +42,13 @@ protected:
     void showEvent(QShowEvent* event) override;
     void closeEvent(QCloseEvent* event) override;
 
-private slots:
+public slots:
     void onClear();
     void onFromPoints();
     void onCancelPicking();
     void onFromCOM();
+
+private slots:
     void onDataLandmarkPicked(QPointF pt);
     void onDataPickingDone();
     void onTargetLandmarkPicked(QPointF pt);

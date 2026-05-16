@@ -22,6 +22,7 @@
 #include <QRadioButton>
 #include <QSpinBox>
 #include <QStatusBar>
+#include <QScrollArea>
 #include <QToolBar>
 #include <QWidget>
 #include <cmath>
@@ -546,9 +547,18 @@ void ImageWindow::createMenus() {
     matchMenu->addAction("Completed image")->setEnabled(false);
     matchMenu->addAction("Rotated image")->setEnabled(false);
     matchMenu->addSeparator();
-    matchMenu->addAction("From points")->setEnabled(false);
-    matchMenu->addAction("From COM...")->setEnabled(false);
-    matchMenu->addAction("Clear parameters")->setEnabled(false);
+    connect(matchMenu->addAction("From points"), &QAction::triggered, this, [this]{
+        showMatchingControlPanel();
+        matchingPanel_->onFromPoints();
+    });
+    connect(matchMenu->addAction("From COM..."), &QAction::triggered, this, [this]{
+        showMatchingControlPanel();
+        matchingPanel_->onFromCOM();
+    });
+    connect(matchMenu->addAction("Clear parameters"), &QAction::triggered, this, [this]{
+        showMatchingControlPanel();
+        matchingPanel_->onClear();
+    });
 }
 
 void ImageWindow::createToolBar() {
@@ -558,7 +568,7 @@ void ImageWindow::createToolBar() {
 
     tb->addWidget(new QLabel("Style  "));
     styleCombo_ = new QComboBox;
-    styleCombo_->addItems({"Linear", "False color", "Medium gray", "Linear 2", "Custom color"});
+    styleCombo_->addItems({"Linear", "False color", "Medium gray", "Linear 2", "Graycast"});
     tb->addWidget(styleCombo_);
 
     tb->addSeparator();
@@ -577,7 +587,12 @@ void ImageWindow::createToolBar() {
 void ImageWindow::createCentralWidget() {
     depthView_ = new DepthImageView(image_, this);
     depthView_->setRoiMask(&roiMask_);
-    setCentralWidget(depthView_);
+
+    auto* scrollArea = new QScrollArea(this);
+    scrollArea->setWidget(depthView_);
+    scrollArea->setWidgetResizable(false);
+    scrollArea->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+    setCentralWidget(scrollArea);
 
     connect(styleCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, [this](int idx){

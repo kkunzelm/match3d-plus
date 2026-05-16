@@ -105,6 +105,12 @@ void DepthImageView::rebuildImage() {
     const int h = static_cast<int>(image_.rows);
     qimage_ = QImage(w, h, QImage::Format_RGB32);
 
+    if (style_ == ImageWindow::Style::GrayCast) {
+        rebuildGrayCast();
+        dirty_ = false;
+        return;
+    }
+
     for (int r = 0; r < h; ++r) {
         QRgb* line = reinterpret_cast<QRgb*>(qimage_.scanLine(r));
         for (int c = 0; c < w; ++c) {
@@ -125,6 +131,67 @@ void DepthImageView::rebuildImage() {
         }
     }
     dirty_ = false;
+}
+
+void DepthImageView::rebuildGrayCast() {
+    // Sobel kernels — same as in the original GreyAnimateKH_ ImageJ plugin.
+    // kernelX computes the horizontal gradient, kernelY the vertical gradient.
+    // gx = sobel_x / (8 * dx),  gy = sobel_y / (8 * dy)
+    // The factor 8 = 4 (kernel normalisation) × 2 (centred finite difference).
+    // theta   = atan( sqrt(gx² + gy²) )
+    // shading = cos(theta)  — Lambertian diffuse reflection with zenith light
+    // Flat surfaces (cos == 1) are rendered black, matching the scanner convention
+    // that zero-gradient areas and invalid pixels both appear as "no signal".
+    static constexpr int kx[3][3] = {{-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1}};
+    static constexpr int ky[3][3] = {{ 1, 2, 1}, { 0, 0, 0}, {-1,-2,-1}};
+
+    const int w  = static_cast<int>(image_.cols);
+    const int h  = static_cast<int>(image_.rows);
+    // Normalize gradient by the clip Z-range relative to image size so that the
+    // shading is independent of physical units (µm, mm, m all give the same result).
+    // A slope that spans the full clip range over the full image maps to theta = 45°.
+    const float  zRange    = clipMax_ - clipMin_;
+    const double refPxSize = (zRange > 0.0f)
+        ? (zRange / std::max(w, h))
+        : 1.0;
+
+    for (int r = 0; r < h; ++r) {
+        QRgb* line = reinterpret_cast<QRgb*>(qimage_.scanLine(r));
+        for (int c = 0; c < w; ++c) {
+            const uint32_t ur = static_cast<uint32_t>(r);
+            const uint32_t uc = static_cast<uint32_t>(c);
+
+            if (!image_.isValid(ur, uc)) {
+                line[c] = qRgb(0, 0, 0);
+                continue;
+            }
+
+            // 3×3 Sobel convolution; clamp neighbours at image borders.
+            // Raw pixel values (including zero/invalid neighbours) are used,
+            // matching the original ImageJ behaviour.
+            double gx = 0.0, gy = 0.0;
+            for (int dr = -1; dr <= 1; ++dr) {
+                for (int dc = -1; dc <= 1; ++dc) {
+                    const double v = image_.at(
+                        static_cast<uint32_t>(std::clamp(r + dr, 0, h - 1)),
+                        static_cast<uint32_t>(std::clamp(c + dc, 0, w - 1)));
+                    gx += kx[dr + 1][dc + 1] * v;
+                    gy += ky[dr + 1][dc + 1] * v;
+                }
+            }
+            gx /= (8.0 * refPxSize);
+            gy /= (8.0 * refPxSize);
+
+            const double theta = std::atan(std::sqrt(gx * gx + gy * gy));
+            const float  cos_v = static_cast<float>(std::cos(theta));
+            int gray = (cos_v < 1.0f) ? static_cast<int>(cos_v * 255.0f) : 0;
+
+            if (roiMask_ && !roiMask_->isSelected(ur, uc))
+                gray /= 4;
+
+            line[c] = qRgb(gray, gray, gray);
+        }
+    }
 }
 
 QRgb DepthImageView::colorForZ(float z) const {
@@ -154,13 +221,16 @@ QRgb DepthImageView::jetColor(float t) {
     return qRgb(static_cast<int>(r * 255), static_cast<int>(g * 255), static_cast<int>(b * 255));
 }
 
+QSize DepthImageView::sizeHint() const {
+    return QSize(static_cast<int>(image_.cols * zoom_),
+                 static_cast<int>(image_.rows * zoom_));
+}
+
 QRectF DepthImageView::imageRect() const {
     if (image_.cols == 0 || image_.rows == 0) return {};
-    const float iw = static_cast<float>(image_.cols) * zoom_;
-    const float ih = static_cast<float>(image_.rows) * zoom_;
-    const float ox = (static_cast<float>(width())  - iw) * 0.5f + pan_.x();
-    const float oy = (static_cast<float>(height()) - ih) * 0.5f + pan_.y();
-    return {ox, oy, iw, ih};
+    return QRectF(0, 0,
+                  static_cast<float>(image_.cols) * zoom_,
+                  static_cast<float>(image_.rows) * zoom_);
 }
 
 QPointF DepthImageView::imageToWidget(float col, float row) const {
@@ -329,6 +399,7 @@ void DepthImageView::leaveEvent(QEvent*) {
 void DepthImageView::wheelEvent(QWheelEvent* event) {
     const float factor = (event->angleDelta().y() > 0) ? 1.15f : (1.0f / 1.15f);
     zoom_ = std::clamp(zoom_ * factor, 0.05f, 32.0f);
+    updateGeometry();
     update();
 }
 

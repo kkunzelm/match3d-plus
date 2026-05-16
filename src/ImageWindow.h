@@ -29,7 +29,7 @@ public:
     void setMainWindow(MainWindow* mw) { mainWindow_ = mw; }
 
     // Display style enum used by DepthImageView
-    enum class Style { Linear, FalseColor, MediumGray, Linear2, CustomColor };
+    enum class Style { Linear, FalseColor, MediumGray, Linear2, GrayCast };
     Style currentStyle() const { return style_; }
 
 signals:

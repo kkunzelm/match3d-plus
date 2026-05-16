@@ -21,6 +21,8 @@ public:
     float clipMin() const { return clipMin_; }
     float clipMax() const { return clipMax_; }
 
+    QSize sizeHint() const override;
+
     void setRoiMask(const RoiMask* mask);
     void roiChanged();  // call after external ROI modification
 
@@ -57,6 +59,7 @@ protected:
 
 private:
     void rebuildImage();
+    void rebuildGrayCast();
     QRgb colorForZ(float z) const;
     static QRgb jetColor(float t);
 
@@ -75,7 +78,6 @@ private:
     bool   dirty_ = true;
 
     float   zoom_  = 1.0f;
-    QPointF pan_   = {0.0f, 0.0f};
 
     // Polygon mode state
     enum class PolygonMode { None, Select, Unselect };
