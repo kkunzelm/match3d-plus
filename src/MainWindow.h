@@ -1,0 +1,75 @@
+#pragma once
+
+#include <QMainWindow>
+#include <QVector>
+#include "AppSettings.h"
+#include "io/ViffReader.h"
+
+class QCloseEvent;
+class QListWidget;
+class QListWidgetItem;
+class ImageWindow;
+
+class MainWindow : public QMainWindow {
+    Q_OBJECT
+public:
+    explicit MainWindow(QWidget* parent = nullptr);
+
+    // Open a VIFF or PLY file; dispatches by extension (used by CLI argument loading)
+    void openFile(const QString& path);
+
+    // Open a computed (in-memory) image as a new window
+    void openImageWindow(ViffImage img, const QString& title);
+
+    // Returns all currently open (non-null) image windows
+    QVector<ImageWindow*> imageWindows() const;
+
+protected:
+    void closeEvent(QCloseEvent* event) override;
+
+private slots:
+    void onOpenViff();
+    void onOpenPly();
+    void onCloseAll();
+    void onGlobalParameters();
+    void onAbout();
+
+    void onImage1SelectionChanged(QListWidgetItem* current);
+    void onImage2SelectionChanged(QListWidgetItem* current);
+
+    void onImageWindowClosing(int index);
+
+private:
+    void openPlyFile(const QString& path);  // shows pixel-size dialog then imports
+
+    void createActions();
+    void createMenus();
+    void createCentralWidget();
+
+    void addImageToLists(int index, const QString& name);
+    void removeImageFromLists(int index);
+    void raiseImageWindow(int index);
+
+    // All open image windows (nullptr slot = closed window)
+    QVector<ImageWindow*> imageWindows_;
+    int nextIndex_ = 0;
+
+    // Image-1 = baseline/reference, Image-2 = data/follow-up.
+    QListWidget* imageList1_ = nullptr;
+    QListWidget* imageList2_ = nullptr;
+
+    AppSettings settings_;
+    QString lastDir_;
+
+    // Actions
+    QAction* actOpenViff_          = nullptr;
+    QAction* actOpenPly_           = nullptr;
+    QAction* actCloseAll_          = nullptr;
+    QAction* actQuit_              = nullptr;
+    QAction* actGlobalParams_      = nullptr;
+    QAction* actSetClipFromImg1_   = nullptr;
+    QAction* actTransferPolygon_   = nullptr;
+    QAction* actExtend1to2_        = nullptr;
+    QAction* actMerge1in2_         = nullptr;
+    QAction* actDiff2D_            = nullptr;
+};

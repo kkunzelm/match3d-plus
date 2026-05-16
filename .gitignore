@@ -1,0 +1,53 @@
+# Build output
+build/
+cmake-build-*/
+
+# CMake generated
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
+CTestTestfile.cmake
+_deps/
+
+# Qt generated
+*.moc
+moc_*.cpp
+qrc_*.cpp
+ui_*.h
+.qmake.cache
+.qmake.stash
+
+# Compiled output
+*.o
+*.a
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# clangd / LSP
+.cache/
+compile_commands.json
+
+# Project-specific: planning/spec docs
+docs/gui-specification.md
+docs/implementation-strategy.md
+docs/registration-strategies.md
+docs/viff-format.md
+
+# Project-specific: initial prompt
+first-prompt.txt
+
+# Project-specific: internal reference material
+data/Information/
+data/3d-data/*.java

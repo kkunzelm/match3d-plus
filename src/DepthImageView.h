@@ -1,0 +1,90 @@
+#pragma once
+
+#include "ImageWindow.h"
+#include "io/ViffReader.h"
+
+#include <QImage>
+#include <QPointF>
+#include <QPolygonF>
+#include <QVector>
+#include <QWidget>
+
+class RoiMask;
+
+class DepthImageView : public QWidget {
+    Q_OBJECT
+public:
+    explicit DepthImageView(const ViffImage& img, QWidget* parent = nullptr);
+
+    void setStyle(ImageWindow::Style style);
+    void setClipRange(float zMin, float zMax);
+    float clipMin() const { return clipMin_; }
+    float clipMax() const { return clipMax_; }
+
+    void setRoiMask(const RoiMask* mask);
+    void roiChanged();  // call after external ROI modification
+
+    // Enter interactive polygon selection mode.
+    // select=true → select pixels inside polygon; false → unselect.
+    void startPolygonMode(bool select);
+    void cancelPolygonMode();
+
+    // Landmark pick mode: user clicks to add numbered landmark points.
+    void startLandmarkPickMode();
+    void stopLandmarkPickMode();
+    void setLandmarkDisplay(const QVector<QPointF>& pts);
+    void clearLandmarkDisplay();
+
+signals:
+    void pixelHovered(int col, int row, float z);
+    void pixelLeft();
+    // Emitted when user double-clicks to close polygon (image coords).
+    void polygonCompleted(QPolygonF imagePoly, bool select);
+    // Emitted on each single click in landmark pick mode (image coords).
+    void landmarkPicked(QPointF imagePos);
+    // Emitted when user presses Enter or double-clicks in landmark pick mode.
+    void landmarkPickingDone();
+
+protected:
+    void paintEvent(QPaintEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
+    void mousePressEvent(QMouseEvent* event) override;
+    void mouseDoubleClickEvent(QMouseEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
+    void leaveEvent(QEvent* event) override;
+    void wheelEvent(QWheelEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
+
+private:
+    void rebuildImage();
+    QRgb colorForZ(float z) const;
+    static QRgb jetColor(float t);
+
+    bool widgetToImage(const QPointF& pos, int& col, int& row) const;
+    QPointF imageToWidget(float col, float row) const;
+    QRectF imageRect() const;
+
+    const ViffImage& image_;
+    const RoiMask*   roiMask_ = nullptr;
+
+    ImageWindow::Style style_ = ImageWindow::Style::Linear;
+    float clipMin_;
+    float clipMax_;
+
+    QImage qimage_;
+    bool   dirty_ = true;
+
+    float   zoom_  = 1.0f;
+    QPointF pan_   = {0.0f, 0.0f};
+
+    // Polygon mode state
+    enum class PolygonMode { None, Select, Unselect };
+    PolygonMode  polyMode_    = PolygonMode::None;
+    QPolygonF    polyVerts_;   // image coordinates (col, row)
+    QPointF      polyMouse_;   // current mouse image coordinates (for rubber band)
+    bool         polyHasMouse_ = false;
+
+    // Landmark pick mode state
+    bool             landmarkMode_    = false;
+    QVector<QPointF> landmarkDisplay_;  // image coords of displayed landmarks
+};
