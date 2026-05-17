@@ -64,16 +64,20 @@ private slots:
     void onDiffImage();
     void onCompleted();
 
-private:
+public slots:
     void refreshTargetList();
+
+private:
     ImageWindow* selectedTarget() const;
+    ImageWindow* selectedData() const;   // the non-target image from the pair
     void startDataPicking();
     void startTargetPicking();
     void finishPicking();
     void cancelPicking();
     void stopWorker();
 
-    ImageWindow* owner_;
+    ImageWindow* owner_;        // window that opened the panel (header identity only)
+    ImageWindow* dataWindow_ = nullptr;  // data image captured when picking starts
     std::function<QVector<ImageWindow*>()> getWindows_;
     std::function<void(ViffImage, QString)> openWindow_;
 

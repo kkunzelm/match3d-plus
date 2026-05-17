@@ -108,22 +108,29 @@ void RoiMask::clipToZRange(const ViffImage& img, float zMin, float zMax) {
         }
 }
 
-void RoiMask::clipToGradient(const ViffImage& img, float maxGrad) {
+void RoiMask::clipToGradient(const ViffImage& img, float maxAngleDeg) {
+    // Per-axis Z threshold: one pixel step in X (or Y) of physical size ps
+    // corresponds to slope angle α when dZ = ps × tan(α).
+    const float angleRad = maxAngleDeg * static_cast<float>(M_PI) / 180.0f;
+    const float tanA     = std::tan(angleRad);
+    const float thX = (img.xPixelSize > 0.0f ? img.xPixelSize : 1.0f) * tanA;
+    const float thY = (img.yPixelSize > 0.0f ? img.yPixelSize : 1.0f) * tanA;
+
     for (uint32_t r = 0; r < rows_; ++r) {
         for (uint32_t c = 0; c < cols_; ++c) {
             if (!mask_[r * cols_ + c]) continue;
             if (!img.isValid(r, c)) { mask_[r * cols_ + c] = false; continue; }
             const float v = img.at(r, c);
-            // Check 4-connected neighbours
-            auto check = [&](uint32_t nr, uint32_t nc) {
-                if (!img.isValid(nr, nc)) return;
-                if (std::abs(img.at(nr, nc) - v) > maxGrad)
-                    mask_[r * cols_ + c] = false;
-            };
-            if (r > 0)          check(r - 1, c);
-            if (r + 1 < rows_)  check(r + 1, c);
-            if (c > 0)          check(r, c - 1);
-            if (c + 1 < cols_)  check(r, c + 1);
+            // Y-neighbours (row direction)
+            if (r > 0 && img.isValid(r-1, c) && std::abs(img.at(r-1, c) - v) > thY)
+                { mask_[r * cols_ + c] = false; continue; }
+            if (r+1 < rows_ && img.isValid(r+1, c) && std::abs(img.at(r+1, c) - v) > thY)
+                { mask_[r * cols_ + c] = false; continue; }
+            // X-neighbours (col direction)
+            if (c > 0 && img.isValid(r, c-1) && std::abs(img.at(r, c-1) - v) > thX)
+                { mask_[r * cols_ + c] = false; continue; }
+            if (c+1 < cols_ && img.isValid(r, c+1) && std::abs(img.at(r, c+1) - v) > thX)
+                { mask_[r * cols_ + c] = false; continue; }
         }
     }
 }

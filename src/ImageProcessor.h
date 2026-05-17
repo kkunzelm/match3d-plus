@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QString>
 #include <cstdint>
 
 class ViffImage;
@@ -49,9 +50,18 @@ public:
         float    max      = 0;
         float    mean     = 0;
         float    stddev   = 0;
-        float    q10      = 0;   // 10th percentile
-        float    q90      = 0;   // 90th percentile
+        float    q02      = 0;
+        float    q05      = 0;
+        float    q10      = 0;
+        float    q50      = 0;   // median
+        float    q90      = 0;
+        float    q95      = 0;
+        float    q98      = 0;
         uint32_t validCount = 0;
     };
     static Stats computeStats(const ViffImage& img, const RoiMask* roi);
+
+    // Format stats as a tagged key=value text block suitable for display and saving.
+    // Each line: "Key = Value\n". Comment lines start with '#'.
+    static QString formatStats(const Stats& s, const QString& imageLabel);
 };

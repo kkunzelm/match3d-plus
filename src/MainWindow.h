@@ -24,6 +24,13 @@ public:
     // Returns all currently open (non-null) image windows
     QVector<ImageWindow*> imageWindows() const;
 
+    // Returns the two images selected in list1 / list2 for matching.
+    // Falls back to all open windows when fewer than two images are selected.
+    QVector<ImageWindow*> selectedPair() const;
+
+signals:
+    void imageWindowClosed(int index);
+
 protected:
     void closeEvent(QCloseEvent* event) override;
 
@@ -57,6 +64,10 @@ private:
     // Image-1 = baseline/reference, Image-2 = data/follow-up.
     QListWidget* imageList1_ = nullptr;
     QListWidget* imageList2_ = nullptr;
+
+    // Indices of the images currently selected in each list (-1 = none selected).
+    int selectedIndex1_ = -1;
+    int selectedIndex2_ = -1;
 
     AppSettings settings_;
     QString lastDir_;

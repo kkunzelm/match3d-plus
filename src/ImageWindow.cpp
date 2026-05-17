@@ -33,7 +33,11 @@
 #include "io/ViffWriter.h"
 
 #include <QFile>
+#include <QFont>
+#include <QPlainTextEdit>
+#include <QPushButton>
 #include <QTextStream>
+#include <QVBoxLayout>
 
 ImageWindow::ImageWindow(int index, const QString& path,
                          ViffImage image, QWidget* parent)
@@ -178,28 +182,46 @@ void ImageWindow::showScaleDialog() {
 }
 
 void ImageWindow::showStatisticsDialog() {
-    const auto s = ImageProcessor::computeStats(image_, &roiMask_);
-    const QString msg =
-        QString("Valid pixels: %1\n\n"
-                "Min:    %2\n"
-                "Max:    %3\n"
-                "Mean:   %4\n"
-                "StdDev: %5\n"
-                "10%%:   %6\n"
-                "90%%:   %7")
-            .arg(s.validCount)
-            .arg(static_cast<double>(s.min),    0, 'f', 2)
-            .arg(static_cast<double>(s.max),    0, 'f', 2)
-            .arg(static_cast<double>(s.mean),   0, 'f', 2)
-            .arg(static_cast<double>(s.stddev), 0, 'f', 2)
-            .arg(static_cast<double>(s.q10),    0, 'f', 2)
-            .arg(static_cast<double>(s.q90),    0, 'f', 2);
-    QMessageBox::information(this, "Statistics", msg);
+    const auto s   = ImageProcessor::computeStats(image_, &roiMask_);
+    const QString label = QFileInfo(path_).fileName();
+    const QString text  = ImageProcessor::formatStats(s, label);
+
+    QDialog dlg(this);
+    dlg.setWindowTitle("Statistics — " + label);
+    auto* layout = new QVBoxLayout(&dlg);
+
+    auto* edit = new QPlainTextEdit(text, &dlg);
+    edit->setReadOnly(true);
+    edit->setFont(QFont("Courier", 10));
+    edit->setMinimumSize(380, 300);
+    layout->addWidget(edit);
+
+    auto* buttons = new QDialogButtonBox(&dlg);
+    auto* saveBtn = buttons->addButton("Save...", QDialogButtonBox::ActionRole);
+    buttons->addButton(QDialogButtonBox::Close);
+    layout->addWidget(buttons);
+
+    connect(saveBtn, &QPushButton::clicked, &dlg, [&]{
+        const QString path = QFileDialog::getSaveFileName(
+            &dlg, "Save statistics", label + "_stats.txt",
+            "Text files (*.txt);;All files (*)");
+        if (path.isEmpty()) return;
+        QFile f(path);
+        if (f.open(QIODevice::WriteOnly | QIODevice::Text))
+            QTextStream(&f) << text;
+        else
+            QMessageBox::warning(&dlg, "Save", "Cannot write file:\n" + path);
+    });
+    connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::accept);
+
+    dlg.exec();
 }
 
 void ImageWindow::showHistogramDialog() {
-    HistogramDialog dlg(image_, &roiMask_,
-                        depthView_->clipMin(), depthView_->clipMax(), this);
+    HistogramDialog dlg(image_, &roiMask_, depthView_,
+        [this](float zMin, float zMax){
+            applyRoiOp([this, zMin, zMax](RoiMask& m){ m.clipToZRange(image_, zMin, zMax); });
+        }, this);
     dlg.exec();
 }
 
@@ -207,6 +229,7 @@ void ImageWindow::showHistogramDialog() {
 
 void ImageWindow::onPolygonCompleted(QPolygonF poly, bool select) {
     applyRoiOp([&poly, select](RoiMask& m){ m.applyPolygon(poly, select); });
+    statusBar()->clearMessage();
 }
 
 // ── Match panel ───────────────────────────────────────────────────────────────
@@ -216,7 +239,7 @@ void ImageWindow::showMatchingControlPanel() {
         matchingPanel_ = new MatchingControlPanel(
             this,
             [this]() -> QVector<ImageWindow*> {
-                return mainWindow_ ? mainWindow_->imageWindows() : QVector<ImageWindow*>{};
+                return mainWindow_ ? mainWindow_->selectedPair() : QVector<ImageWindow*>{};
             },
             [this](ViffImage img, QString title) {
                 if (mainWindow_) mainWindow_->openImageWindow(std::move(img), title);
@@ -227,6 +250,9 @@ void ImageWindow::showMatchingControlPanel() {
                 [this]{ matchingPanel_ = nullptr; });
         connect(matchingPanel_, &MatchingControlPanel::transformChanged, this,
                 [this](const Transformation3D& t){ matchTransform_ = t; });
+        if (mainWindow_)
+            connect(mainWindow_, &MainWindow::imageWindowClosed,
+                    matchingPanel_, &MatchingControlPanel::refreshTargetList);
         matchingPanel_->setTransform(matchTransform_);
     }
     matchingPanel_->show();
@@ -271,10 +297,16 @@ void ImageWindow::createMenus() {
     connect(editMenu->addAction("Unselect all"), &QAction::triggered, this,
             [this]{ applyRoiOp([](RoiMask& m){ m.unselectAll(); }); });
     editMenu->addSeparator();
-    connect(editMenu->addAction("Select polygon"), &QAction::triggered, this,
-            [this]{ depthView_->startPolygonMode(true); });
-    connect(editMenu->addAction("Unselect polygon"), &QAction::triggered, this,
-            [this]{ depthView_->startPolygonMode(false); });
+    connect(editMenu->addAction("Select polygon"), &QAction::triggered, this, [this]{
+        depthView_->startPolygonMode(true);
+        statusBar()->showMessage(
+            "Select polygon: left-click to add vertices — right-click to close — Backspace to undo last point — Esc to cancel");
+    });
+    connect(editMenu->addAction("Unselect polygon"), &QAction::triggered, this, [this]{
+        depthView_->startPolygonMode(false);
+        statusBar()->showMessage(
+            "Unselect polygon: left-click to add vertices — right-click to close — Backspace to undo last point — Esc to cancel");
+    });
     connect(editMenu->addAction("Select complement"), &QAction::triggered, this,
             [this]{ applyRoiOp([](RoiMask& m){ m.invert(); }); });
     editMenu->addSeparator();
@@ -293,9 +325,24 @@ void ImageWindow::createMenus() {
     editMenu->addSeparator();
     connect(editMenu->addAction("Clip to Z range"), &QAction::triggered, this,
             [this]{ showZClipDialog(); });
-    connect(editMenu->addAction("Clip to gradient"), &QAction::triggered, this, [this]{
-        constexpr float kDefaultClipDz = 200.0f;
-        applyRoiOp([this](RoiMask& m){ m.clipToGradient(image_, kDefaultClipDz); });
+    connect(editMenu->addAction("Clip to gradient..."), &QAction::triggered, this, [this]{
+        QDialog dlg(this);
+        dlg.setWindowTitle("Clip to gradient");
+        auto* form = new QFormLayout(&dlg);
+        auto* sbAngle = new QDoubleSpinBox;
+        sbAngle->setRange(1.0, 89.0);
+        sbAngle->setDecimals(1);
+        sbAngle->setSingleStep(5.0);
+        sbAngle->setSuffix(" °");
+        sbAngle->setValue(45.0);
+        form->addRow("Max slope angle (from XY plane):", sbAngle);
+        auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+        form->addRow(buttons);
+        connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+        connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+        if (dlg.exec() != QDialog::Accepted) return;
+        const float angle = static_cast<float>(sbAngle->value());
+        applyRoiOp([this, angle](RoiMask& m){ m.clipToGradient(image_, angle); });
     });
     connect(editMenu->addAction("Commit selection"), &QAction::triggered, this, [this]{
         roiMask_.commitToImage(image_);
@@ -598,6 +645,9 @@ void ImageWindow::createCentralWidget() {
             this, [this](int idx){
                 depthView_->setStyle(static_cast<ImageWindow::Style>(idx));
             });
+    connect(radioRoi_, &QRadioButton::toggled, this, [this](bool roiOnly){
+        depthView_->setRoiOnly(roiOnly);
+    });
     connect(depthView_, &DepthImageView::pixelHovered, this,
             [this](int col, int row, float z) {
                 if (std::isnan(z))

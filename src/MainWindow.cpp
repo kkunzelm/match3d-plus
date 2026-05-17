@@ -317,16 +317,31 @@ void MainWindow::onAbout() {
 
 void MainWindow::onImage1SelectionChanged(QListWidgetItem* current) {
     if (!current) return;
-    raiseImageWindow(current->data(kIndexRole).toInt());
+    selectedIndex1_ = current->data(kIndexRole).toInt();
+    raiseImageWindow(selectedIndex1_);
 }
 
 void MainWindow::onImage2SelectionChanged(QListWidgetItem* current) {
     if (!current) return;
-    raiseImageWindow(current->data(kIndexRole).toInt());
+    selectedIndex2_ = current->data(kIndexRole).toInt();
+    raiseImageWindow(selectedIndex2_);
 }
 
 void MainWindow::onImageWindowClosing(int index) {
     if (index >= 0 && index < imageWindows_.size())
         imageWindows_[index] = nullptr;
+    if (selectedIndex1_ == index) selectedIndex1_ = -1;
+    if (selectedIndex2_ == index) selectedIndex2_ = -1;
     removeImageFromLists(index);
+    emit imageWindowClosed(index);
+}
+
+QVector<ImageWindow*> MainWindow::selectedPair() const {
+    ImageWindow* w1 = (selectedIndex1_ >= 0 && selectedIndex1_ < imageWindows_.size())
+                      ? imageWindows_[selectedIndex1_] : nullptr;
+    ImageWindow* w2 = (selectedIndex2_ >= 0 && selectedIndex2_ < imageWindows_.size())
+                      ? imageWindows_[selectedIndex2_] : nullptr;
+    if (w1 && w2)
+        return {w1, w2};
+    return imageWindows();  // fallback: both lists need a selection
 }

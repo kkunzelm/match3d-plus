@@ -9,6 +9,8 @@
 #include <QVector>
 #include <QWidget>
 
+#include <utility>
+
 class RoiMask;
 
 class DepthImageView : public QWidget {
@@ -25,6 +27,10 @@ public:
 
     void setRoiMask(const RoiMask* mask);
     void roiChanged();  // call after external ROI modification
+
+    // When roiOnly=true, unselected pixels are drawn black (hidden).
+    // When false (default), unselected pixels are dimmed to 25% brightness.
+    void setRoiOnly(bool roiOnly);
 
     // Enter interactive polygon selection mode.
     // select=true → select pixels inside polygon; false → unselect.
@@ -61,11 +67,11 @@ private:
     void rebuildImage();
     void rebuildGrayCast();
     QRgb colorForZ(float z) const;
-    static QRgb jetColor(float t);
 
     bool widgetToImage(const QPointF& pos, int& col, int& row) const;
     QPointF imageToWidget(float col, float row) const;
     QRectF imageRect() const;
+    std::pair<float,float> pixelScale() const;
 
     const ViffImage& image_;
     const RoiMask*   roiMask_ = nullptr;
@@ -75,7 +81,8 @@ private:
     float clipMax_;
 
     QImage qimage_;
-    bool   dirty_ = true;
+    bool   dirty_   = true;
+    bool   roiOnly_ = false;
 
     float   zoom_  = 1.0f;
 

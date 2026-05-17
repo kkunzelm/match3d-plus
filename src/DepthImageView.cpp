@@ -31,6 +31,19 @@ DepthImageView::DepthImageView(const ViffImage& img, QWidget* parent)
         }
     }
     if (clipMin_ >= clipMax_) { clipMin_ = 0.0f; clipMax_ = 1.0f; }
+
+    // Set initial zoom with two constraints:
+    // 1. Correct physical aspect ratio: use (cols*sx) × (rows*sy) as the logical image size
+    //    so that anisotropic pixels (xPixelSize ≠ yPixelSize) are rendered without distortion.
+    // 2. No downsampling: zoom_ >= 1.0 ensures every data row/column maps to at least one
+    //    screen pixel, so the displayed gray values match the source data exactly.
+    //    (Below 1.0, Qt drops rows when scaling the QImage, producing wrong pixel values.)
+    const auto [sx, sy] = pixelScale();
+    const float physW = image_.cols * sx;
+    const float physH = image_.rows * sy;
+    const float fitZoom = (physW > 0.0f && physH > 0.0f)
+        ? std::min(700.0f / physW, 550.0f / physH) : 1.0f;
+    zoom_ = std::clamp(std::max(fitZoom, 1.0f), 0.05f, 32.0f);
 }
 
 // ── Public setters ────────────────────────────────────────────────────────────
@@ -51,6 +64,13 @@ void DepthImageView::setClipRange(float zMin, float zMax) {
 
 void DepthImageView::setRoiMask(const RoiMask* mask) {
     roiMask_ = mask;
+    dirty_   = true;
+    update();
+}
+
+void DepthImageView::setRoiOnly(bool roiOnly) {
+    if (roiOnly_ == roiOnly) return;
+    roiOnly_ = roiOnly;
     dirty_   = true;
     update();
 }
@@ -119,10 +139,10 @@ void DepthImageView::rebuildImage() {
             const bool valid = image_.isValid(ur, uc);
             const bool selected = !roiMask_ || roiMask_->isSelected(ur, uc);
 
-            if (!valid) {
+            if (!valid || (!selected && roiOnly_)) {
                 line[c] = qRgb(0, 0, 0);
             } else if (!selected) {
-                // Deselected pixels: 25% brightness
+                // Deselected pixels in "All" mode: 25% brightness
                 QRgb col = colorForZ(image_.at(ur, uc));
                 line[c] = qRgb(qRed(col) / 4, qGreen(col) / 4, qBlue(col) / 4);
             } else {
@@ -199,8 +219,20 @@ QRgb DepthImageView::colorForZ(float z) const {
     const float t = (range > 0.0f) ? std::clamp((z - clipMin_) / range, 0.0f, 1.0f) : 0.5f;
 
     switch (style_) {
-    case ImageWindow::Style::FalseColor:
-        return jetColor(t);
+    case ImageWindow::Style::FalseColor: {
+        // Each half-range is normalized independently (matches QlfUpdateLUT_ ImageJ plugin):
+        //   negative [clipMin_, 0] → red:  brightest red at clipMin_, black at 0
+        //   positive [0, clipMax_] → gray: black at 0, white at clipMax_
+        // This ensures both signs are always fully visible regardless of asymmetry.
+        const float zc = std::clamp(z, clipMin_, clipMax_);
+        if (zc < 0.0f && clipMin_ < 0.0f)
+            return qRgb(static_cast<int>(zc / clipMin_ * 255.0f), 0, 0);
+        if (zc > 0.0f && clipMax_ > 0.0f) {
+            const int v = static_cast<int>(zc / clipMax_ * 255.0f);
+            return qRgb(v, v, v);
+        }
+        return qRgb(0, 0, 0);  // z==0 or degenerate clip range → black
+    }
     case ImageWindow::Style::MediumGray: {
         const float v = std::clamp(0.5f + (t - 0.5f), 0.0f, 1.0f);
         const int g = static_cast<int>(v * 255.0f);
@@ -213,24 +245,27 @@ QRgb DepthImageView::colorForZ(float z) const {
     }
 }
 
-QRgb DepthImageView::jetColor(float t) {
-    auto c01 = [](float x) { return std::clamp(x, 0.0f, 1.0f); };
-    const float r = c01(1.5f - std::abs(4.0f * t - 3.0f));
-    const float g = c01(1.5f - std::abs(4.0f * t - 2.0f));
-    const float b = c01(1.5f - std::abs(4.0f * t - 1.0f));
-    return qRgb(static_cast<int>(r * 255), static_cast<int>(g * 255), static_cast<int>(b * 255));
+
+// Returns the per-axis scale factors (sx, sy) so that the rendered image has
+// the correct physical aspect ratio. Both factors equal 1 when pixels are square.
+std::pair<float,float> DepthImageView::pixelScale() const {
+    const float minPs = std::min(image_.xPixelSize, image_.yPixelSize);
+    if (minPs <= 0.0f) return {1.0f, 1.0f};
+    return {image_.xPixelSize / minPs, image_.yPixelSize / minPs};
 }
 
 QSize DepthImageView::sizeHint() const {
-    return QSize(static_cast<int>(image_.cols * zoom_),
-                 static_cast<int>(image_.rows * zoom_));
+    const auto [sx, sy] = pixelScale();
+    return QSize(static_cast<int>(image_.cols * sx * zoom_),
+                 static_cast<int>(image_.rows * sy * zoom_));
 }
 
 QRectF DepthImageView::imageRect() const {
     if (image_.cols == 0 || image_.rows == 0) return {};
+    const auto [sx, sy] = pixelScale();
     return QRectF(0, 0,
-                  static_cast<float>(image_.cols) * zoom_,
-                  static_cast<float>(image_.rows) * zoom_);
+                  image_.cols * sx * zoom_,
+                  image_.rows * sy * zoom_);
 }
 
 QPointF DepthImageView::imageToWidget(float col, float row) const {
@@ -247,8 +282,15 @@ void DepthImageView::paintEvent(QPaintEvent*) {
     p.fillRect(rect(), Qt::black);
 
     if (dirty_) rebuildImage();
-    if (!qimage_.isNull())
-        p.drawImage(imageRect(), qimage_);
+    if (!qimage_.isNull()) {
+        // Draw through a scale transform so Qt uses nearest-neighbour sampling
+        // (no row/column blending at any zoom level).
+        const auto [sx, sy] = pixelScale();
+        p.setRenderHint(QPainter::SmoothPixmapTransform, false);
+        p.setTransform(QTransform::fromScale(sx * zoom_, sy * zoom_));
+        p.drawImage(QPointF(0, 0), qimage_);
+        p.resetTransform();
+    }
 
     // Polygon overlay
     if (polyMode_ != PolygonMode::None && !polyVerts_.isEmpty()) {
@@ -330,6 +372,23 @@ void DepthImageView::mouseMoveEvent(QMouseEvent* event) {
 }
 
 void DepthImageView::mousePressEvent(QMouseEvent* event) {
+    if (event->button() == Qt::RightButton) {
+        if (polyMode_ != PolygonMode::None) {
+            // Add the right-click position itself as the closing vertex
+            int col, row;
+            if (widgetToImage(event->position(), col, row))
+                polyVerts_ << QPointF(col, row);
+            if (polyVerts_.size() >= 3) {
+                const bool selectOp = (polyMode_ == PolygonMode::Select);
+                QPolygonF poly = polyVerts_;
+                cancelPolygonMode();
+                emit polygonCompleted(poly, selectOp);
+            } else {
+                cancelPolygonMode();  // not enough vertices — just cancel
+            }
+        }
+        return;
+    }
     if (event->button() != Qt::LeftButton) return;
     int col, row;
     if (landmarkMode_) {
@@ -374,6 +433,14 @@ void DepthImageView::keyPressEvent(QKeyEvent* event) {
     }
     if (event->key() == Qt::Key_Escape && polyMode_ != PolygonMode::None) {
         cancelPolygonMode();
+        return;
+    }
+    if ((event->key() == Qt::Key_Backspace || event->key() == Qt::Key_Delete)
+            && polyMode_ != PolygonMode::None) {
+        if (!polyVerts_.isEmpty()) {
+            polyVerts_.removeLast();
+            update();
+        }
         return;
     }
     if (event->key() == Qt::Key_Return && polyMode_ != PolygonMode::None) {

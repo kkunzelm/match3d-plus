@@ -24,6 +24,7 @@ public:
     int imageIndex() const { return index_; }
     const QString& imagePath() const { return path_; }
     const ViffImage& image() const { return image_; }
+    const RoiMask&   roiMask() const { return roiMask_; }
     DepthImageView* depthView() const { return depthView_; }
 
     void setMainWindow(MainWindow* mw) { mainWindow_ = mw; }

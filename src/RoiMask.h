@@ -35,7 +35,7 @@ public:
 
     // Z-based clipping (marks pixels outside range as unselected)
     void clipToZRange  (const ViffImage& img, float zMin, float zMax);
-    void clipToGradient(const ViffImage& img, float maxGrad);
+    void clipToGradient(const ViffImage& img, float maxAngleDeg);
 
     // Permanently zero-out unselected pixels in img (data[i] = 0 if !mask_[i])
     void commitToImage(ViffImage& img) const;

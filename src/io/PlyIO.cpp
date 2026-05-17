@@ -121,9 +121,11 @@ bool PlyIO::read(const std::string& path, ViffImage& img,
         std::vector<double>   sumZ(total, 0.0);
         std::vector<uint32_t> cnt(total, 0);
 
+        // Y is flipped so row 0 = yMax (top of image = largest Y in world space),
+        // matching the standard "view from above" orientation where Y increases upward.
         for (size_t i = 0; i < N; ++i) {
             const int col = static_cast<int>((xs[i] - xMin) / xPixelSize + 0.5);
-            const int row = static_cast<int>((ys[i] - yMin) / yPixelSize + 0.5);
+            const int row = static_cast<int>((yMax - ys[i]) / yPixelSize + 0.5);
             if (col < 0 || col >= static_cast<int>(cols) ||
                 row < 0 || row >= static_cast<int>(rows)) continue;
             const size_t idx = static_cast<size_t>(row) * cols + col;
@@ -136,7 +138,7 @@ bool PlyIO::read(const std::string& path, ViffImage& img,
         img.xPixelSize = xPixelSize;
         img.yPixelSize = yPixelSize;
         img.originX    = static_cast<float>(xMin);
-        img.originY    = static_cast<float>(yMin);
+        img.originY    = static_cast<float>(yMax);  // row 0 corresponds to yMax
         img.data.assign(total, 0.0f);
 
         for (size_t i = 0; i < total; ++i)
@@ -157,12 +159,13 @@ bool PlyIO::write(const std::string& path, const ViffImage& img, std::string& er
         std::vector<std::array<double, 3>> pts;
         pts.reserve(img.rows * img.cols / 2);  // rough pre-alloc
 
+        // originX = world X of column 0; originY = world Y of row 0 (= yMax, Y decreases downward).
         for (uint32_t r = 0; r < img.rows; ++r) {
             for (uint32_t c = 0; c < img.cols; ++c) {
                 if (!img.isValid(r, c)) continue;
                 pts.push_back({
-                    c * static_cast<double>(img.xPixelSize),
-                    r * static_cast<double>(img.yPixelSize),
+                    img.originX + c * static_cast<double>(img.xPixelSize),
+                    img.originY - r * static_cast<double>(img.yPixelSize),
                     static_cast<double>(img.at(r, c))
                 });
             }

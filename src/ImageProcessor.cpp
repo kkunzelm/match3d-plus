@@ -2,6 +2,9 @@
 #include "RoiMask.h"
 #include "io/ViffReader.h"
 
+#include <QDateTime>
+#include <QString>
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -226,8 +229,16 @@ ImageProcessor::Stats ImageProcessor::computeStats(const ViffImage& img,
     std::sort(vals.begin(), vals.end());
     s.min = vals.front();
     s.max = vals.back();
-    s.q10 = vals[vals.size() * 10 / 100];
-    s.q90 = vals[vals.size() * 90 / 100];
+    auto pct = [&](int p) -> float {
+        return vals[vals.size() * static_cast<size_t>(p) / 100];
+    };
+    s.q02 = pct(2);
+    s.q05 = pct(5);
+    s.q10 = pct(10);
+    s.q50 = pct(50);
+    s.q90 = pct(90);
+    s.q95 = pct(95);
+    s.q98 = pct(98);
 
     double sum = 0;
     for (float v : vals) sum += v;
@@ -238,4 +249,27 @@ ImageProcessor::Stats ImageProcessor::computeStats(const ViffImage& img,
     s.stddev = static_cast<float>(std::sqrt(var / vals.size()));
 
     return s;
+}
+
+QString ImageProcessor::formatStats(const Stats& s, const QString& imageLabel) {
+    const QString date = QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm");
+    auto row = [](const char* key, double val, int decimals = 4) -> QString {
+        return QString("%1 = %2\n").arg(key, -14).arg(val, 0, 'f', decimals);
+    };
+    return QString("# match3d statistics\n"
+                   "# Image: %1\n"
+                   "# Date:  %2\n"
+                   "ValidPixels    = %3\n")
+               .arg(imageLabel).arg(date).arg(s.validCount)
+           + row("Min",    s.min)
+           + row("Max",    s.max)
+           + row("Mean",   s.mean)
+           + row("StdDev", s.stddev)
+           + row("Q02",    s.q02)
+           + row("Q05",    s.q05)
+           + row("Q10",    s.q10)
+           + row("Q50",    s.q50)
+           + row("Q90",    s.q90)
+           + row("Q95",    s.q95)
+           + row("Q98",    s.q98);
 }

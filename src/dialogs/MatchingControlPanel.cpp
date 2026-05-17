@@ -6,6 +6,10 @@
 
 #include <QCheckBox>
 #include <QDialogButtonBox>
+#include <QFile>
+#include <QFont>
+#include <QPlainTextEdit>
+#include <QTextStream>
 #include <QDoubleSpinBox>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -281,6 +285,14 @@ ImageWindow* MatchingControlPanel::selectedTarget() const {
     return nullptr;
 }
 
+ImageWindow* MatchingControlPanel::selectedData() const {
+    ImageWindow* target = selectedTarget();
+    for (ImageWindow* w : getWindows_()) {
+        if (w && w != target) return w;
+    }
+    return owner_;  // fallback when pair is not fully resolved
+}
+
 // ── Transformation UI helpers ─────────────────────────────────────────────────
 
 void MatchingControlPanel::setTransform(const Transformation3D& t) {
@@ -315,7 +327,7 @@ void MatchingControlPanel::onFromCOM() {
     Transformation3D t;
     QString err;
     if (!CoarseRegistration::fromCOM(
-            owner_->image(), nullptr,
+            selectedData()->image(), nullptr,
             target->image(), nullptr,
             t, err)) {
         QMessageBox::warning(this, "From COM", err);
@@ -346,12 +358,6 @@ void MatchingControlPanel::onFromPoints() {
             "Please select a target image first.");
         return;
     }
-    if (target == owner_) {
-        QMessageBox::information(this, "From Points",
-            "Target and data image must be different.");
-        return;
-    }
-
     dataLandmarks_.clear();
     targetLandmarks_.clear();
     startDataPicking();
@@ -364,20 +370,21 @@ void MatchingControlPanel::onCancelPicking() {
 // ── Landmark pick state machine ───────────────────────────────────────────────
 
 void MatchingControlPanel::startDataPicking() {
+    dataWindow_ = selectedData();  // capture now; stable for the entire pick sequence
     pickState_ = PickState::PickingData;
     btnFromPoints_->setText("Done picking data →");
     pickStatusLabel_->setText(
         QString("Picking in data image #%1 — click points, Enter or double-click to advance")
-        .arg(owner_->imageIndex()));
+        .arg(dataWindow_->imageIndex()));
     pickStatusLabel_->setVisible(true);
     btnCancelPick_->setVisible(true);
 
-    owner_->depthView()->startLandmarkPickMode();
-    owner_->raise();
+    dataWindow_->depthView()->startLandmarkPickMode();
+    dataWindow_->raise();
 
-    connDataPicked_ = connect(owner_->depthView(), &DepthImageView::landmarkPicked,
+    connDataPicked_ = connect(dataWindow_->depthView(), &DepthImageView::landmarkPicked,
                               this, &MatchingControlPanel::onDataLandmarkPicked);
-    connDataDone_   = connect(owner_->depthView(), &DepthImageView::landmarkPickingDone,
+    connDataDone_   = connect(dataWindow_->depthView(), &DepthImageView::landmarkPickingDone,
                               this, &MatchingControlPanel::onDataPickingDone);
 }
 
@@ -388,7 +395,7 @@ void MatchingControlPanel::startTargetPicking() {
     // Disconnect from data image
     disconnect(connDataPicked_);
     disconnect(connDataDone_);
-    owner_->depthView()->stopLandmarkPickMode();
+    dataWindow_->depthView()->stopLandmarkPickMode();
 
     pickState_ = PickState::PickingTarget;
     btnFromPoints_->setText("Done picking target ✓");
@@ -410,11 +417,10 @@ void MatchingControlPanel::onDataLandmarkPicked(QPointF pt) {
     dataLandmarks_.append(pt);
     pickStatusLabel_->setText(
         QString("Picking in data image #%1 — %2 point(s) picked, Enter/double-click to advance")
-        .arg(owner_->imageIndex())
+        .arg(dataWindow_->imageIndex())
         .arg(dataLandmarks_.size()));
 
-    // Update landmark display in data image
-    owner_->depthView()->setLandmarkDisplay(dataLandmarks_);
+    dataWindow_->depthView()->setLandmarkDisplay(dataLandmarks_);
 }
 
 void MatchingControlPanel::onDataPickingDone() {
@@ -473,7 +479,7 @@ void MatchingControlPanel::onTargetPickingDone() {
     Transformation3D t;
     QString err;
     const bool ok = CoarseRegistration::fromPoints(
-        dataPts, owner_->image(),
+        dataPts, dataWindow_->image(),
         refPts,  target->image(),
         t, err);
 
@@ -495,7 +501,8 @@ void MatchingControlPanel::finishPicking() {
     btnFromPoints_->setText("From Points");
     pickStatusLabel_->setVisible(false);
     btnCancelPick_->setVisible(false);
-    owner_->depthView()->clearLandmarkDisplay();
+    if (dataWindow_) dataWindow_->depthView()->clearLandmarkDisplay();
+    dataWindow_ = nullptr;
 }
 
 void MatchingControlPanel::cancelPicking() {
@@ -506,8 +513,10 @@ void MatchingControlPanel::cancelPicking() {
     disconnect(connTargetPicked_);
     disconnect(connTargetDone_);
 
-    owner_->depthView()->stopLandmarkPickMode();
-    owner_->depthView()->clearLandmarkDisplay();
+    if (dataWindow_) {
+        dataWindow_->depthView()->stopLandmarkPickMode();
+        dataWindow_->depthView()->clearLandmarkDisplay();
+    }
 
     ImageWindow* target = selectedTarget();
     if (target) {
@@ -530,17 +539,20 @@ void MatchingControlPanel::onMatch() {
         QMessageBox::information(this, "Match", "Please select a target/reference image.");
         return;
     }
-    if (target == owner_) {
+    stopWorker();  // stop any previous run
+
+    ImageWindow* data = selectedData();
+    if (data == target) {
         QMessageBox::information(this, "Match", "Target and data image must be different.");
         return;
     }
 
-    stopWorker();  // stop any previous run
-
     // Build worker config
     RegistrationWorker::Config cfg;
     cfg.modelImg         = target->image();    // reference (will not move)
-    cfg.dataImg          = owner_->image();    // data (will be aligned)
+    cfg.modelRoi         = target->roiMask();
+    cfg.dataImg          = data->image();      // data (will be aligned)
+    cfg.dataRoi          = data->roiMask();
     cfg.initialTransform = currentTransform();
     cfg.maxIterations    = sbIters_->value();
     cfg.samplingLimit    = std::max(3, sbMinPs_->value());
@@ -640,33 +652,43 @@ void MatchingControlPanel::onDiffImage() {
     const float vMin  = static_cast<float>(sbMinDiff_->value());
     const float vMax  = static_cast<float>(sbMaxDiff_->value());
 
-    // model = target (baseline), data = owner_ (registered image)
+    ImageWindow* data = selectedData();
     ViffImage diff = DifferenceCalculator::compute(
-        target->image(), owner_->image(), t,
+        target->image(), data->image(), t,
         useMin, vMin, useMax, vMax);
 
     const auto stats = ImageProcessor::computeStats(diff, nullptr);
 
-    const QString statsMsg =
-        QString("Valid pixels: %1\n\n"
-                "Min:    %2\n"
-                "Max:    %3\n"
-                "Mean:   %4\n"
-                "StdDev: %5\n"
-                "10%%:   %6\n"
-                "90%%:   %7")
-            .arg(stats.validCount)
-            .arg(static_cast<double>(stats.min),    0, 'f', 4)
-            .arg(static_cast<double>(stats.max),    0, 'f', 4)
-            .arg(static_cast<double>(stats.mean),   0, 'f', 4)
-            .arg(static_cast<double>(stats.stddev), 0, 'f', 4)
-            .arg(static_cast<double>(stats.q10),    0, 'f', 4)
-            .arg(static_cast<double>(stats.q90),    0, 'f', 4);
-    QMessageBox::information(this, "Difference Image Statistics", statsMsg);
-
     const QString title = QString("diff_%1_minus_%2")
         .arg(QFileInfo(target->imagePath()).baseName())
-        .arg(QFileInfo(owner_->imagePath()).baseName());
+        .arg(QFileInfo(data->imagePath()).baseName());
+    const QString statsText = ImageProcessor::formatStats(stats, title);
+
+    QDialog dlg(this);
+    dlg.setWindowTitle("Difference Image Statistics");
+    auto* layout = new QVBoxLayout(&dlg);
+    auto* edit = new QPlainTextEdit(statsText, &dlg);
+    edit->setReadOnly(true);
+    edit->setFont(QFont("Courier", 10));
+    edit->setMinimumSize(380, 300);
+    layout->addWidget(edit);
+    auto* buttons = new QDialogButtonBox(&dlg);
+    auto* saveBtn = buttons->addButton("Save...", QDialogButtonBox::ActionRole);
+    buttons->addButton(QDialogButtonBox::Close);
+    layout->addWidget(buttons);
+    connect(saveBtn, &QPushButton::clicked, &dlg, [&]{
+        const QString path = QFileDialog::getSaveFileName(
+            &dlg, "Save statistics", title + "_stats.txt",
+            "Text files (*.txt);;All files (*)");
+        if (path.isEmpty()) return;
+        QFile f(path);
+        if (f.open(QIODevice::WriteOnly | QIODevice::Text))
+            QTextStream(&f) << statsText;
+        else
+            QMessageBox::warning(&dlg, "Save", "Cannot write file:\n" + path);
+    });
+    connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::accept);
+    dlg.exec();
 
     if (openWindow_) openWindow_(std::move(diff), title);
 }
@@ -680,7 +702,7 @@ void MatchingControlPanel::onCompleted() {
 
     const Transformation3D t = currentTransform();
     ViffImage completed = DifferenceCalculator::computeCompleted(
-        target->image(), owner_->image(), t);
+        target->image(), selectedData()->image(), t);
 
     const QString title = QString("completed_%1")
         .arg(QFileInfo(target->imagePath()).baseName());

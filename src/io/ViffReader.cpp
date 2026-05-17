@@ -121,5 +121,15 @@ bool ViffReader::load(const std::string& path, ViffImage& img) {
         for (auto& v : img.data) byteSwap4(&v);
     }
 
+    // Auto-detect difference images: if any finite non-zero pixel is negative,
+    // this cannot be a plain depth image (where zero means "no scan" and valid
+    // pixels are always positive). Mark it so isValid() doesn't reject negatives.
+    for (const float v : img.data) {
+        if (v < 0.0f && std::isfinite(v)) {
+            img.isDiffImage = true;
+            break;
+        }
+    }
+
     return true;
 }
