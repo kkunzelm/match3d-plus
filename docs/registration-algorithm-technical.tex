@@ -55,7 +55,7 @@ This creates a \textbf{scale imbalance} where $z \gg x, y$. Standard 3D registra
 \section{Registration Pipeline Overview}
 %=============================================================================
 
-The registration pipeline consists of three stages:
+The registration pipeline consists of four stages:
 
 \begin{enumerate}
     \item \textbf{Coarse Registration} -- Initial alignment using either:
@@ -64,7 +64,9 @@ The registration pipeline consists of three stages:
         \item Landmark point pairs (2D rotation + translation + $z$ offset)
     \end{itemize}
 
-    \item \textbf{Fine Registration (Match)} -- Iterative 2.5D refinement
+    \item \textbf{Align (4-DOF)} -- Iterative 2.5D refinement optimizing $\alpha, t_x, t_y, t_z$
+
+    \item \textbf{Refine (6-DOF)} -- Point-to-plane refinement optimizing all 6 DOF (optional)
 
     \item \textbf{Difference Calculation} -- Compute per-pixel height differences
 \end{enumerate}
@@ -77,15 +79,19 @@ The registration pipeline consists of three stages:
 ]
     \node[box] (com) at (0,0) {from COM\\(translation only)};
     \node[box] (pts) at (4,0) {from Points\\(2D rotation + trans.)};
-    \node[box] (match) at (2,-2) {Match\\(2.5D iterative)};
-    \node[box] (diff) at (2,-4) {Difference\\Image};
+    \node[box] (align) at (2,-2) {Align\\(4-DOF)};
+    \node[box] (refine) at (2,-4) {Refine\\(6-DOF, optional)};
+    \node[box] (diff) at (2,-6) {Difference\\Image};
 
-    \draw[arrow] (com) -- (match);
-    \draw[arrow] (pts) -- (match);
-    \draw[arrow] (match) -- (diff);
+    \draw[arrow] (com) -- (align);
+    \draw[arrow] (pts) -- (align);
+    \draw[arrow] (align) -- (refine);
+    \draw[arrow] (refine) -- (diff);
+    \draw[arrow] (align) to[out=-30,in=30] (diff);
 
     \node[above=0.5cm of com, anchor=south west, xshift=-1cm] {\textbf{Coarse}};
-    \node[left=0.3cm of match] {\textbf{Fine}};
+    \node[left=0.3cm of align] {\textbf{Fine}};
+    \node[left=0.3cm of refine] {\textbf{Polish}};
     \node[left=0.3cm of diff] {\textbf{Result}};
 \end{tikzpicture}
 \caption{Registration pipeline overview}
@@ -95,7 +101,9 @@ The registration pipeline consists of three stages:
 \section{Transformation Model}
 %=============================================================================
 
-For 2.5D data, we restrict the transformation to:
+\subsection{4-DOF Model (Align)}
+
+For typical 2.5D data, we restrict the transformation to:
 \begin{itemize}
     \item Rotation around the $z$-axis only (yaw angle $\alpha$)
     \item Translation in all three axes $(t_x, t_y, t_z)$
@@ -120,6 +128,18 @@ Or in compact form:
 \begin{equation}
 \mathbf{p}' = \mathbf{R}_z(\alpha) \cdot \mathbf{p} + \mathbf{t}
 \end{equation}
+
+\subsection{6-DOF Model (Refine)}
+
+For the optional 6-DOF refinement, we use the full Euler angle parameterization with three rotation angles:
+\begin{itemize}
+    \item $\alpha$ -- rotation around $z$-axis (yaw)
+    \item $\beta$ -- rotation around $y$-axis (pitch)
+    \item $\gamma$ -- rotation around $x$-axis (roll)
+    \item $(t_x, t_y, t_z)$ -- translation
+\end{itemize}
+
+For 2.5D heightmap data, $\beta$ and $\gamma$ should typically remain small ($< 1°$) since the surfaces are assumed to be roughly parallel. See Section~7 for the detailed 6-DOF formulation.
 
 %=============================================================================
 \section{Coarse Registration: Center of Mass (COM)}
@@ -258,10 +278,10 @@ t_z = \text{median}\{z_i^r - z_i^d\}_{i=1}^n
 \textbf{Why median?} The median is robust to outliers. If one landmark has an erroneous $z$-value (e.g., due to noise or a hole in the data), it won't corrupt the entire estimate.
 
 %=============================================================================
-\section{Fine Registration: 2.5D Iterative Refinement}
+\section{Fine Registration: Align (4-DOF)}
 %=============================================================================
 
-The ``Match'' function performs iterative refinement of the coarse alignment. Unlike standard 3D ICP, our algorithm:
+The ``Align'' function performs 4-DOF iterative refinement: rotation around the $z$-axis ($\alpha$) plus translation $(t_x, t_y, t_z)$. Unlike standard 3D ICP, our algorithm:
 
 \begin{enumerate}
     \item Finds correspondences based on $(x,y)$ grid position, not 3D Euclidean distance
@@ -368,6 +388,220 @@ where $f_r = r_d - \lfloor r_d \rfloor$ and $f_c = c_d - \lfloor c_d \rfloor$ ar
 \end{figure}
 
 %=============================================================================
+\section{Fine Registration: Refine (6-DOF Point-to-Plane)}
+%=============================================================================
+
+The ``Refine'' function performs full 6-DOF optimization using Neugebauer's point-to-plane ICP algorithm. This method optimizes all three Euler angles $(\alpha, \beta, \gamma)$ plus translation $(t_x, t_y, t_z)$.
+
+\subsection{Motivation}
+
+While 4-DOF Align is sufficient for most 2.5D heightmap data, there are cases where the surfaces have slight tilts relative to each other (e.g., due to mounting differences between measurements). The point-to-plane algorithm provides:
+
+\begin{itemize}
+    \item Faster convergence than point-to-point ICP (typically $3\times$ fewer iterations)
+    \item More accurate alignment when surfaces have local slope variations
+    \item Ability to correct small tilts ($\beta, \gamma \neq 0$)
+\end{itemize}
+
+\subsection{6-DOF Transformation Model}
+
+The full transformation uses three Euler angles in ZYX convention:
+
+\begin{equation}
+\mathbf{R} = \mathbf{R}_z(\alpha) \cdot \mathbf{R}_y(\beta) \cdot \mathbf{R}_x(\gamma)
+\end{equation}
+
+where:
+\begin{align}
+\mathbf{R}_z(\alpha) &= \begin{pmatrix} \cos\alpha & -\sin\alpha & 0 \\ \sin\alpha & \cos\alpha & 0 \\ 0 & 0 & 1 \end{pmatrix} \\[1em]
+\mathbf{R}_y(\beta) &= \begin{pmatrix} \cos\beta & 0 & \sin\beta \\ 0 & 1 & 0 \\ -\sin\beta & 0 & \cos\beta \end{pmatrix} \\[1em]
+\mathbf{R}_x(\gamma) &= \begin{pmatrix} 1 & 0 & 0 \\ 0 & \cos\gamma & -\sin\gamma \\ 0 & \sin\gamma & \cos\gamma \end{pmatrix}
+\end{align}
+
+The transformation is:
+\begin{equation}
+\mathbf{p}' = \mathbf{R} \cdot \mathbf{p} + \mathbf{t}
+\end{equation}
+
+\subsection{Point-to-Plane Distance}
+
+Given a point $\mathbf{p}_d$ on the data surface and its corresponding point $\mathbf{p}_m$ on the model surface with surface normal $\mathbf{n}_m = (n_x, n_y, n_z)^T$, the point-to-plane distance is:
+
+\begin{equation}
+d = \mathbf{n}_m \cdot (\mathbf{T}(\mathbf{p}_d) - \mathbf{p}_m)
+\end{equation}
+
+This measures the \textbf{signed distance along the normal direction}, which represents how far the transformed data point is from the model's tangent plane at the corresponding point.
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[scale=1.2]
+    % Model surface
+    \draw[thick,blue] plot[smooth] coordinates {(0,1) (1,1.5) (2,2) (3,1.8) (4,1.2)};
+    \node[blue] at (4.3,1.2) {Model};
+
+    % Model point
+    \fill[blue] (2,2) circle (2pt);
+    \node[blue,above] at (2,2) {$\mathbf{p}_m$};
+
+    % Normal vector
+    \draw[-{Stealth},blue,thick] (2,2) -- (1.5,2.8) node[above] {$\mathbf{n}_m$};
+
+    % Tangent plane
+    \draw[blue,dashed] (0.8,1.4) -- (3.2,2.6);
+    \node[blue] at (3.5,2.7) {tangent plane};
+
+    % Transformed data point
+    \fill[red] (1.8,2.5) circle (2pt);
+    \node[red,left] at (1.6,2.5) {$\mathbf{T}(\mathbf{p}_d)$};
+
+    % Point-to-plane distance
+    \draw[green!50!black,thick,dashed] (1.8,2.5) -- (1.85,2.1);
+    \node[green!50!black] at (2.4,2.3) {$d$};
+\end{tikzpicture}
+\caption{Point-to-plane distance: The distance $d$ is measured along the surface normal direction, not the Euclidean distance to the point.}
+\end{figure}
+
+\subsection{Surface Normal Computation}
+
+For a 2.5D heightmap, surface normals are computed from the local gradients:
+
+\begin{equation}
+\frac{\partial z}{\partial x} \approx \frac{z(r, c+1) - z(r, c-1)}{2 \Delta_x}, \quad
+\frac{\partial z}{\partial y} \approx \frac{z(r+1, c) - z(r-1, c)}{2 \Delta_y}
+\end{equation}
+
+The unnormalized normal vector is:
+\begin{equation}
+\tilde{\mathbf{n}} = \begin{pmatrix} -\partial z/\partial x \\ -\partial z/\partial y \\ 1 \end{pmatrix}
+\end{equation}
+
+Normalized:
+\begin{equation}
+\mathbf{n} = \frac{\tilde{\mathbf{n}}}{\|\tilde{\mathbf{n}}\|} = \frac{1}{\sqrt{g_x^2 + g_y^2 + 1}} \begin{pmatrix} -g_x \\ -g_y \\ 1 \end{pmatrix}
+\end{equation}
+
+where $g_x = \partial z/\partial x$ and $g_y = \partial z/\partial y$.
+
+\subsection{Linearization for Small Angles}
+
+Following Neugebauer, we linearize the transformation for small incremental updates. For small angles $\delta\alpha, \delta\beta, \delta\gamma$:
+
+\begin{equation}
+\mathbf{R} \approx \mathbf{I} + \begin{pmatrix} 0 & -\delta\alpha & \delta\beta \\ \delta\alpha & 0 & -\delta\gamma \\ -\delta\beta & \delta\gamma & 0 \end{pmatrix}
+\end{equation}
+
+A point $\mathbf{p} = (x, y, z)^T$ transforms to:
+\begin{equation}
+\mathbf{p}' \approx \begin{pmatrix}
+x - \delta\alpha \cdot y + \delta\beta \cdot z + \delta t_x \\
+\delta\alpha \cdot x + y - \delta\gamma \cdot z + \delta t_y \\
+-\delta\beta \cdot x + \delta\gamma \cdot y + z + \delta t_z
+\end{pmatrix}
+\end{equation}
+
+\subsection{Normal Equation System}
+
+The point-to-plane constraint for a correspondence pair becomes:
+\begin{equation}
+n_x(x' - x_m) + n_y(y' - y_m) + n_z(z' - z_m) = 0
+\end{equation}
+
+where $(n_x, n_y, n_z)$ is the transformed normal and $(x_m, y_m, z_m)$ is the model point. Substituting the linearized transformation and rearranging:
+
+\begin{equation}
+\mathbf{a}^T \boldsymbol{\delta} = b
+\end{equation}
+
+where $\boldsymbol{\delta} = (\delta\alpha, \delta\beta, \delta\gamma, \delta t_x, \delta t_y, \delta t_z)^T$ and the constraint coefficients are:
+
+\begin{align}
+a_0 &= n_z \cdot y - n_y \cdot z & \text{(rotation around } x\text{-axis)} \\
+a_1 &= n_x \cdot z - n_z \cdot x & \text{(rotation around } y\text{-axis)} \\
+a_2 &= n_y \cdot x - n_x \cdot y & \text{(rotation around } z\text{-axis)} \\
+a_3 &= n_x & \text{(translation in } x\text{)} \\
+a_4 &= n_y & \text{(translation in } y\text{)} \\
+a_5 &= n_z & \text{(translation in } z\text{)} \\
+b &= n_z \cdot (z_m - z) + n_y \cdot (y_m - y) + n_x \cdot (x_m - x)
+\end{align}
+
+Accumulating over all correspondence pairs gives the $6 \times 6$ normal equation system:
+\begin{equation}
+\mathbf{A}^T\mathbf{A} \cdot \boldsymbol{\delta} = \mathbf{A}^T\mathbf{b}
+\end{equation}
+
+This is solved using Cholesky decomposition (for positive definite $\mathbf{A}^T\mathbf{A}$).
+
+\subsection{Algorithm}
+
+\begin{algorithm}[H]
+\caption{6-DOF Point-to-Plane Refinement (Neugebauer)}
+\begin{algorithmic}[1]
+\Require Model image $M$, Data image $D$, Initial transform $T_0 = (\alpha, \beta, \gamma, t_x, t_y, t_z)$
+\Ensure Refined transform $T^*$
+\State $T \gets T_0$, $\text{prevRMS} \gets \infty$
+\For{$k = 1$ to $\text{maxIterations}$}
+    \State $\mathbf{N} \gets \mathbf{0}_{6\times 6}$, $\mathbf{r} \gets \mathbf{0}_6$ \Comment{Normal equation accumulator}
+    \State $\text{sumSqErr} \gets 0$, $\text{count} \gets 0$
+    \ForAll{valid model pixels $(r_m, c_m)$ (optionally subsampled)}
+        \State Compute model point $\mathbf{p}_m$ and gradients $g_x, g_y$
+        \State Compute normal $\mathbf{n} = (-g_x, -g_y, 1)^T / \|...\|$
+        \State Transform normal: $\mathbf{n}' = \mathbf{R} \cdot \mathbf{n}$
+        \State Apply inverse transform to find data position $(x_d, y_d)$
+        \If{data position valid}
+            \State Interpolate $z_d$, compute $\mathbf{p}_d$
+            \State Transform: $\mathbf{p}_d' = \mathbf{R} \cdot \mathbf{p}_d + \mathbf{t}$
+            \State Compute coefficients $\mathbf{a}$ and $b$ from linearization
+            \State Accumulate: $\mathbf{N} \gets \mathbf{N} + \mathbf{a}\mathbf{a}^T$, $\mathbf{r} \gets \mathbf{r} + b \cdot \mathbf{a}$
+            \State $\text{sumSqErr} \gets \text{sumSqErr} + b^2$
+            \State $\text{count} \gets \text{count} + 1$
+        \EndIf
+    \EndFor
+    \State
+    \State Solve $\mathbf{N} \cdot \boldsymbol{\delta} = \mathbf{r}$ via Cholesky decomposition
+    \State
+    \State \textbf{// Update transform (compose incremental with current)}
+    \State $\alpha \gets \alpha + \delta_0$, $\beta \gets \beta + \delta_1$, $\gamma \gets \gamma + \delta_2$
+    \State $t_x \gets t_x + \delta_3$, $t_y \gets t_y + \delta_4$, $t_z \gets t_z + \delta_5$
+    \State Rebuild rotation matrix $\mathbf{R}$ from updated angles
+    \State
+    \State \textbf{// Check convergence}
+    \State $\text{RMS} \gets \sqrt{\text{sumSqErr} / \text{count}}$
+    \If{$(\text{prevRMS} - \text{RMS}) / \text{prevRMS} < \text{minRMSDecrease}$}
+        \State \textbf{break}
+    \EndIf
+    \State $\text{prevRMS} \gets \text{RMS}$
+\EndFor
+\State \Return $T = (\alpha, \beta, \gamma, t_x, t_y, t_z)$
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Outlier Handling}
+
+Points with large residuals are excluded from the normal equation accumulation. A point is considered an outlier if:
+\begin{equation}
+|b| > 2.58 \cdot \text{RMS}_{\text{prev}}
+\end{equation}
+
+The threshold $2.58$ corresponds to the 99\% quantile of a standard normal distribution, meaning approximately 1\% of points are rejected as outliers.
+
+\subsection{Convergence Behavior}
+
+Point-to-plane ICP typically converges faster than point-to-point ICP because:
+\begin{enumerate}
+    \item It correctly handles the case where surfaces slide tangentially
+    \item The error function has a flatter minimum in tangent directions
+    \item Convergence is linear in the tangent plane vs.\ quadratic for point-to-point
+\end{enumerate}
+
+For well-behaved 2.5D data, $\beta$ and $\gamma$ should remain small ($< 1°$). Large values may indicate:
+\begin{itemize}
+    \item Surface tilt between measurements
+    \item Mounting differences
+    \item Algorithm divergence (reduce iterations or check input data)
+\end{itemize}
+
+%=============================================================================
 \section{Difference Image Calculation}
 %=============================================================================
 
@@ -448,6 +682,12 @@ d_{3D} = \sqrt{(x_1-x_2)^2 + (y_1-y_2)^2 + (z_1-z_2)^2} \approx |z_1 - z_2|
     \item Besl, P.J. and McKay, N.D. (1992). ``A Method for Registration of 3-D Shapes.'' \textit{IEEE Transactions on Pattern Analysis and Machine Intelligence}, 14(2), 239--256.
 
     \item Eggert, D.W., Lorusso, A., and Fisher, R.B. (1997). ``Estimating 3-D rigid body transformations: a comparison of four major algorithms.'' \textit{Machine Vision and Applications}, 9(5-6), 272--290.
+
+    \item Neugebauer, P.J. (1997). ``Geometrical cloning of 3D objects via simultaneous registration of multiple range images.'' \textit{Proceedings of the International Conference on Shape Modeling and Applications}, 130--139. (Point-to-plane ICP formulation used in the 6-DOF Refine algorithm.)
+
+    \item Chen, Y. and Medioni, G. (1992). ``Object modelling by registration of multiple range images.'' \textit{Image and Vision Computing}, 10(3), 145--155. (Original point-to-plane ICP concept.)
+
+    \item Low, K.-L. (2004). ``Linear least-squares optimization for point-to-plane ICP surface registration.'' \textit{Technical Report TR04-004, University of North Carolina at Chapel Hill}. (Linearization derivation.)
 \end{enumerate}
 
 \end{document}

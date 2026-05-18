@@ -11,7 +11,9 @@ This guide explains how to use the registration features in Match3D v2 to align 
 5. [Coarse Registration Methods](#coarse-registration-methods)
    - [From COM (Center of Mass)](#from-com-center-of-mass)
    - [From Points (Landmark-Based)](#from-points-landmark-based)
-6. [Fine Registration (Match)](#fine-registration-match)
+6. [Fine Registration](#fine-registration)
+   - [Align (4-DOF)](#align-4-dof)
+   - [Refine (6-DOF)](#refine-6-dof)
 7. [Computing the Difference Image](#computing-the-difference-image)
 8. [Understanding the Results](#understanding-the-results)
 9. [Tips and Troubleshooting](#tips-and-troubleshooting)
@@ -57,8 +59,9 @@ Match3D v2 is designed to compare two 3D surface scans (heightmaps) by:
 1. Open two images: **File → Open** (select Model/Reference, then Data)
 2. Select matching regions in both images using the ROI tools
 3. Click **from COM** for initial alignment
-4. Click **Match** to refine the alignment
-5. Click **Diff Image** to see the differences
+4. Click **Align** to refine the alignment (4-DOF)
+5. Optionally click **Refine** for final polish (6-DOF)
+6. Click **Diff Image** to see the differences
 
 ---
 
@@ -126,7 +129,7 @@ The ROI limits the registration to a specific area. This is useful when:
 
 ## Coarse Registration Methods
 
-Coarse registration provides an initial alignment. You must do this before running the fine registration (Match).
+Coarse registration provides an initial alignment. You should do this before running the fine registration.
 
 ### From COM (Center of Mass)
 
@@ -184,15 +187,58 @@ Coarse registration provides an initial alignment. You must do this before runni
 
 ---
 
-## Fine Registration (Match)
+## Fine Registration
 
-The **Match** function refines the coarse alignment using an iterative algorithm.
+After coarse registration, use fine registration to improve the alignment.
 
-### What it does:
+### Align (4-DOF)
 
-1. Finds overlapping pixels between the aligned images
-2. Iteratively adjusts rotation and translation to minimize differences
-3. Stops when the alignment converges or reaches max iterations
+The **Align** button performs 4-DOF (degrees of freedom) refinement:
+- **alpha** (rotation around Z-axis)
+- **tx, ty, tz** (translation)
+
+**Best for:** Most 2.5D heightmap data where surfaces are roughly parallel.
+
+**What it does:**
+1. Finds overlapping pixels based on (X, Y) grid position
+2. Iteratively computes optimal 2D rotation and translation
+3. Z-offset computed as median of differences (robust to outliers)
+
+**How to use:**
+1. First apply a coarse registration (from COM or from Points)
+2. Click **Align**
+3. A progress bar shows the refinement progress
+4. When done, the transform values are updated
+
+```
+    After Coarse              After Align
+    ┌───────────┐            ┌───────────┐
+    │  ░░████░░ │            │  ████████ │
+    │  ░████░░░ │    ──►     │  ████████ │  Better aligned!
+    │  ░░░░░░░░ │            │  ████████ │
+    └───────────┘            └───────────┘
+```
+
+### Refine (6-DOF)
+
+The **Refine** button performs 6-DOF point-to-plane refinement:
+- **alpha, beta, gamma** (all three rotation angles)
+- **tx, ty, tz** (translation)
+
+**Best for:** Final polish when surfaces may have slight tilts, or for maximum precision.
+
+**What it does:**
+1. Uses Neugebauer's point-to-plane algorithm
+2. Computes surface normals from gradients
+3. Minimizes point-to-plane distances (faster convergence than point-to-point)
+4. Solves all 6 parameters simultaneously
+
+**How to use:**
+1. First run **Align** to get close to the solution
+2. Click **Refine** for final optimization
+3. Check that beta and gamma remain small (< 1°) for typical 2.5D data
+
+**Note:** If beta and gamma become large, the data may have significant tilt that needs investigation.
 
 ### Parameters
 
@@ -202,23 +248,6 @@ The **Match** function refines the coarse alignment using an iterative algorithm
 | **Sampling Limit** | 50000 | Max pixels used per iteration (subsampled for speed) |
 | **Min RMS Decrease** | 1e-5 | Convergence threshold (stops when improvement is tiny) |
 
-### How to use:
-
-1. First apply a coarse registration (from COM or from Points)
-2. Click **Match**
-3. A progress bar shows the refinement progress
-4. When done, the transform values are updated
-
-```
-    After Coarse              After Match
-    ┌───────────┐            ┌───────────┐
-    │  ░░████░░ │            │  ████████ │
-    │  ░████░░░ │    ──►     │  ████████ │  Better aligned!
-    │  ░░░░░░░░ │            │  ████████ │
-    └───────────┘            └───────────┘
-    (slight misalignment)    (refined alignment)
-```
-
 ---
 
 ## Computing the Difference Image
@@ -227,26 +256,35 @@ After registration, you can compute and visualize the height differences.
 
 ### How to use:
 
-1. Complete the registration (coarse + optional Match)
+1. Complete the registration (coarse + Align + optional Refine)
 2. Click **Diff Image**
 3. A new window opens showing the difference image
 
 ### What the colors mean:
 
-| Color | Meaning |
-|-------|---------|
-| **Blue** | Data surface is **below** reference |
-| **Green/Gray** | Surfaces are **equal** (within tolerance) |
-| **Red/Yellow** | Data surface is **above** reference |
-| **Black/Transparent** | Invalid pixel (hole, out of bounds, outside ROI) |
+The difference image uses a **red-black-white** color scale:
+
+| Color | Value | Meaning |
+|-------|-------|---------|
+| **Red** | Negative | Data surface is **below** reference (material loss/wear) |
+| **Black** | Zero | Surfaces are **equal** |
+| **White** | Positive | Data surface is **above** reference (material gain) |
+| **Transparent** | Invalid | Hole, out of bounds, or outside ROI |
 
 ```
     Difference Image Color Scale
 
     ◄─────────────────────────────────────►
-    Blue        Green/Gray        Red/Yellow
-    (below)      (equal)          (above)
-    -max           0              +max
+    Red           Black           White
+    (below)       (equal)         (above)
+    -max            0             +max
+
+    Example: Dental wear study
+    ┌─────────────────────────────┐
+    │  ░░░░░████░░░░░░░░░░░░░░░  │  Red areas = enamel loss
+    │  ░░░██████████░░░░░░░░░░░  │  White areas = deposits
+    │  ░░░░░░████░░░░░░░░░░░░░░  │  Black = no change
+    └─────────────────────────────┘
 ```
 
 ---
@@ -260,8 +298,8 @@ After registration, the Matching Control Panel shows:
 | Field | Description |
 |-------|-------------|
 | **alpha (α)** | Rotation around Z-axis in degrees |
-| **beta (β)** | Rotation around Y-axis (always 0 for 2.5D data) |
-| **gamma (γ)** | Rotation around X-axis (always 0 for 2.5D data) |
+| **beta (β)** | Rotation around Y-axis (typically ~0 for 2.5D data) |
+| **gamma (γ)** | Rotation around X-axis (typically ~0 for 2.5D data) |
 | **tx** | Translation in X direction (meters) |
 | **ty** | Translation in Y direction (meters) |
 | **tz** | Translation in Z direction (depth units) |
@@ -286,7 +324,7 @@ After computing the difference image, statistics are displayed:
 - **Use ROI**: Select only the overlapping region
 - **Avoid holes**: Don't pick landmarks in areas with missing data
 
-### Difference image shows all invalid (black)
+### Difference image shows all invalid (black/transparent)
 
 - The registration may have failed
 - Check that both images actually overlap
@@ -298,7 +336,15 @@ After computing the difference image, statistics are displayed:
 - Large angles may indicate picked points are in wrong order
 - Or the images are rotated relative to each other in the scan
 
-### Match doesn't improve alignment
+### Large beta or gamma after Refine
+
+- For 2.5D heightmaps, beta and gamma should be near zero
+- Large values (> 1°) may indicate:
+  - Surface tilt between measurements
+  - Mounting differences
+  - Algorithm divergence (try fewer iterations)
+
+### Align doesn't improve alignment
 
 - The coarse registration may already be optimal
 - Try adjusting the ROI to include more distinctive features
@@ -332,7 +378,8 @@ After computing the difference image, statistics are displayed:
 │     └── from Points ──► Rotation + Translation (precise)    │
 │                                                             │
 │  4. FINE REGISTRATION                                       │
-│     └── Match ──► Iterative refinement                      │
+│     ├── Align ──► 4-DOF refinement (recommended first)      │
+│     └── Refine ──► 6-DOF point-to-plane (optional polish)   │
 │                                                             │
 │  5. COMPUTE RESULTS                                         │
 │     └── Diff Image ──► Visualize height differences         │
