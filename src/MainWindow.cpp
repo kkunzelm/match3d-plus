@@ -44,6 +44,14 @@ MainWindow::MainWindow(QWidget* parent)
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {
+    // Close all image windows first
+    // Copy list since closing triggers onImageWindowClosing which modifies imageWindows_
+    const QVector<ImageWindow*> wins = imageWindows_;
+    for (ImageWindow* w : wins) {
+        if (w)
+            w->close();
+    }
+
     QSettings s;
     settings_.save(s);
     s.setValue("MainWindow/lastDir", lastDir_);
