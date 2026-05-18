@@ -193,15 +193,17 @@ MatchingControlPanel::MatchingControlPanel(
 
     // ── Action buttons ────────────────────────────────────────────────────────
     auto* actionRow = new QHBoxLayout;
-    btnAlign_    = new QPushButton("Align");     // 4-DOF: alpha + tx,ty,tz
-    btnRefine_   = new QPushButton("Refine");    // 6-DOF: point-to-plane
-    btnStop_     = new QPushButton("Stop");      btnStop_->setEnabled(false);
-    btnDiff_     = new QPushButton("Diff.img."); btnDiff_->setEnabled(false);
-    btnComplete_ = new QPushButton("Complete");  btnComplete_->setEnabled(false);
+    btnAlign_     = new QPushButton("Align");      // 4-DOF: alpha + tx,ty,tz
+    btnRefine_    = new QPushButton("Refine");     // 6-DOF: point-to-plane
+    btnCCLibICP_  = new QPushButton("ICP");        // CCCoreLib ICP (full 6-DOF)
+    btnStop_      = new QPushButton("Stop");       btnStop_->setEnabled(false);
+    btnDiff_      = new QPushButton("Diff.img.");  btnDiff_->setEnabled(false);
+    btnComplete_  = new QPushButton("Complete");   btnComplete_->setEnabled(false);
     auto* btnOk      = new QPushButton("Ok");
     auto* btnCancel  = new QPushButton("Cancel");
     actionRow->addWidget(btnAlign_);
     actionRow->addWidget(btnRefine_);
+    actionRow->addWidget(btnCCLibICP_);
     actionRow->addWidget(btnStop_);
     actionRow->addWidget(btnDiff_);
     actionRow->addWidget(btnComplete_);
@@ -221,9 +223,10 @@ MatchingControlPanel::MatchingControlPanel(
     connect(btnFromPoints_, &QPushButton::clicked, this, &MatchingControlPanel::onFromPoints);
     connect(btnFromCOM,     &QPushButton::clicked, this, &MatchingControlPanel::onFromCOM);
     connect(btnCancelPick_, &QPushButton::clicked, this, &MatchingControlPanel::onCancelPicking);
-    connect(btnAlign_,    &QPushButton::clicked, this, &MatchingControlPanel::onAlign);
-    connect(btnRefine_,   &QPushButton::clicked, this, &MatchingControlPanel::onRefine);
-    connect(btnStop_,     &QPushButton::clicked, this, &MatchingControlPanel::onStop);
+    connect(btnAlign_,     &QPushButton::clicked, this, &MatchingControlPanel::onAlign);
+    connect(btnRefine_,    &QPushButton::clicked, this, &MatchingControlPanel::onRefine);
+    connect(btnCCLibICP_,  &QPushButton::clicked, this, &MatchingControlPanel::onCCLibICP);
+    connect(btnStop_,      &QPushButton::clicked, this, &MatchingControlPanel::onStop);
     connect(btnDiff_,     &QPushButton::clicked, this, &MatchingControlPanel::onDiffImage);
     connect(btnComplete_, &QPushButton::clicked, this, &MatchingControlPanel::onCompleted);
     connect(btnOk,        &QPushButton::clicked, this, &QDialog::accept);
@@ -581,6 +584,7 @@ void MatchingControlPanel::onAlign() {
 
     btnAlign_->setEnabled(false);
     btnRefine_->setEnabled(false);
+    btnCCLibICP_->setEnabled(false);
     btnStop_->setEnabled(true);
     icpStatusLabel_->setText("Align (4-DOF) running...");
     icpStatusLabel_->setVisible(true);
@@ -636,8 +640,65 @@ void MatchingControlPanel::onRefine() {
 
     btnAlign_->setEnabled(false);
     btnRefine_->setEnabled(false);
+    btnCCLibICP_->setEnabled(false);
     btnStop_->setEnabled(true);
     icpStatusLabel_->setText("Refine (6-DOF point-to-plane) running...");
+    icpStatusLabel_->setVisible(true);
+
+    workerThread_->start();
+}
+
+// ── CCCoreLib ICP (full 6-DOF) ────────────────────────────────────────────────
+
+void MatchingControlPanel::onCCLibICP() {
+    cancelPicking();
+
+    ImageWindow* target = selectedTarget();
+    if (!target) {
+        QMessageBox::information(this, "ICP", "Please select a target/reference image.");
+        return;
+    }
+    stopWorker();  // stop any previous run
+
+    ImageWindow* data = selectedData();
+    if (data == target) {
+        QMessageBox::information(this, "ICP", "Target and data image must be different.");
+        return;
+    }
+
+    // Build worker config for CCCoreLib ICP
+    RegistrationWorker::Config cfg;
+    cfg.modelImg         = target->image();
+    cfg.modelRoi         = target->roiMask();
+    cfg.dataImg          = data->image();
+    cfg.dataRoi          = data->roiMask();
+    cfg.initialTransform = currentTransform();
+    cfg.maxIterations    = sbIters_->value();
+    cfg.samplingLimit    = std::max(3, sbMinPs_->value());
+    cfg.minRMSDecrease   = 1.0e-5;
+    cfg.useCCLibICP      = true;  // Use CCCoreLib ICP
+
+    // Create worker and thread
+    workerThread_ = new QThread;
+    worker_       = new RegistrationWorker(std::move(cfg));
+    worker_->moveToThread(workerThread_);
+
+    connect(workerThread_, &QThread::started,
+            worker_,       &RegistrationWorker::run);
+    connect(worker_, &RegistrationWorker::progressUpdated,
+            this,    &MatchingControlPanel::onProgressUpdated);
+    connect(worker_, &RegistrationWorker::registrationFinished,
+            this,    &MatchingControlPanel::onRegistrationFinished);
+    connect(worker_, &RegistrationWorker::registrationFinished,
+            workerThread_, &QThread::quit);
+    connect(workerThread_, &QThread::finished, worker_,       &QObject::deleteLater);
+    connect(workerThread_, &QThread::finished, workerThread_, &QObject::deleteLater);
+
+    btnAlign_->setEnabled(false);
+    btnRefine_->setEnabled(false);
+    btnCCLibICP_->setEnabled(false);
+    btnStop_->setEnabled(true);
+    icpStatusLabel_->setText("CCCoreLib ICP running...");
     icpStatusLabel_->setVisible(true);
 
     workerThread_->start();
@@ -674,6 +735,7 @@ void MatchingControlPanel::onRegistrationFinished(bool ok,
 
     btnAlign_->setEnabled(true);
     btnRefine_->setEnabled(true);
+    btnCCLibICP_->setEnabled(true);
     btnStop_->setEnabled(false);
 
     if (ok) {

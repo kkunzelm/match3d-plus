@@ -78,6 +78,37 @@ This file documents the development history of Match3D v2, a Qt6/C++20 re-implem
 ### 66c143c - Close all image windows when main window is closed
 - Main window close event now closes all child image windows
 
+### a0d223c - Add development history and update .gitignore
+- Created CLAUDE_HISTORY.md for development documentation
+
+### 6d9f317 - Fix 6-DOF registration, add unit conversion, and improve UI
+- **6-DOF point-to-plane ICP rewrite**: Fixed Jacobian formulation for proper convergence
+  - Proper inverse transform for model→data projection: `P_data = R^T * (P_model - T)`
+  - Correct linearized Jacobian: `[(P × n), n]` for parameters (γ, β, α, tx, ty, tz)
+  - Relaxed slope filter from 75° to 89° (only filter near-vertical surfaces)
+  - Debug counters for troubleshooting registration failures
+- **Automatic unit conversion in ViffReader**:
+  - Detects dental scan data: pixel sizes in meters, z values in micrometers
+  - Auto-converts to millimeters for consistent internal use
+  - Heuristic: `pixelSize < 0.001` (meters) AND `zMax > 1000` (µm) triggers conversion
+- **Difference image improvements**:
+  - Removed ROI filtering from difference calculation (computes ALL pixels)
+  - Model's ROI mask is copied to the new difference image for analysis
+- **Status bar**: Shows coordinates in mm instead of pixels
+- **Save dialogs**: Auto-append `.txt` extension when missing
+- **New tool**: `synthetic_test_data` for generating test surfaces with known transformations
+
+### (current) - Add CCCoreLib ICP button
+- **New "ICP" button** in Matching Control Panel (next to Align and Refine)
+  - Uses `ICPRegistrationTools::Register` from CCCoreLib
+  - Full 6-DOF registration (all rotations + translations)
+  - Supports outlier filtering, random sampling, and overlap ratio
+- Intended to eventually replace the custom "Align" algorithm
+- Configuration:
+  - `MAX_ITER_CONVERGENCE` mode
+  - `filterOutFarthestPoints = true` (helps with partial overlap)
+  - `adjustScale = false` (no scale changes for dental scans)
+
 ---
 
 ## Architecture Notes
@@ -89,10 +120,21 @@ This file documents the development history of Match3D v2, a Qt6/C++20 re-implem
 | `src/MainWindow.cpp` | Application main window, file management |
 | `src/ImageWindow.cpp` | Individual image display window with ROI tools |
 | `src/DepthImageView.cpp` | Image rendering (color mapping, Graycast) |
-| `src/registration/RegistrationWorker.cpp` | ICP algorithms (4-DOF and 6-DOF) |
+| `src/registration/RegistrationWorker.cpp` | ICP algorithms (4-DOF, 6-DOF, CCCoreLib ICP) |
 | `src/registration/CoarseRegistration.cpp` | COM and landmark-based alignment |
 | `src/dialogs/MatchingControlPanel.cpp` | Registration UI controls |
-| `src/io/ViffReader.cpp` | VIFF file format parser |
+| `src/io/ViffReader.cpp` | VIFF file format parser with auto unit conversion |
+| `src/tools/SyntheticTestData.cpp` | Test data generator for registration validation |
+
+### Registration Methods
+
+| Button | Method | DOF | Description |
+|--------|--------|-----|-------------|
+| From COM | Center of mass | 3 | Translation only (tx, ty, tz) |
+| From Points | Landmark-based | 4 | 2D rotation + translation |
+| Align | Custom 2.5D ICP | 4 | Z-rotation + translation (α, tx, ty, tz) |
+| Refine | Point-to-plane ICP | 6 | Full Euler + translation (α, β, γ, tx, ty, tz) |
+| ICP | CCCoreLib ICP | 6 | Standard Besl & McKay ICP with outlier filtering |
 
 ### Transformation Model
 
@@ -100,9 +142,17 @@ This file documents the development history of Match3D v2, a Qt6/C++20 re-implem
 4-DOF (Align):
   p' = Rz(alpha) · p + (tx, ty, tz)
 
-6-DOF (Refine):
+6-DOF (Refine/ICP):
   p' = Rz(alpha) · Ry(beta) · Rx(gamma) · p + (tx, ty, tz)
 ```
+
+### Unit System
+
+All internal calculations use **millimeters (mm)**. ViffReader automatically converts:
+- Pixel sizes: meters → mm (×1000)
+- Z values: µm → mm (÷1000)
+
+Detection heuristic: `xPixelSize < 0.001` AND `zMax > 1000`
 
 ### Difference Image Color Scheme
 

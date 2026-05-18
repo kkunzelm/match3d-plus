@@ -29,6 +29,7 @@ public:
         double overlapRatio   = 0.95;   // 1.0 = full overlap expected
         double minRMSDecrease = 1.0e-5;
         bool   use6DOF        = false;  // false = 4-DOF (Align), true = 6-DOF (Refine)
+        bool   useCCLibICP    = false;  // true = use CCCoreLib ICP instead of custom Align
     };
 
     explicit RegistrationWorker(Config cfg, QObject* parent = nullptr);
@@ -56,8 +57,9 @@ signals:
                               QString errorMsg);
 
 private:
-    void run4DOF();  // Align: 4-DOF (alpha + tx, ty, tz)
-    void run6DOF();  // Refine: 6-DOF point-to-plane (Neugebauer)
+    void run4DOF();      // Align: 4-DOF (alpha + tx, ty, tz)
+    void run6DOF();      // Refine: 6-DOF point-to-plane (Neugebauer)
+    void runCCLibICP();  // CCCoreLib ICP (full 6-DOF)
     static CCCoreLib::PointCloud buildCloud(const ViffImage& img, const RoiMask* roi);
 
     Config cfg_;

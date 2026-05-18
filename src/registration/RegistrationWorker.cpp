@@ -36,7 +36,9 @@ void RegistrationWorker::update(float percent) {
 }
 
 void RegistrationWorker::run() {
-    if (cfg_.use6DOF) {
+    if (cfg_.useCCLibICP) {
+        runCCLibICP();
+    } else if (cfg_.use6DOF) {
         run6DOF();
     } else {
         run4DOF();
@@ -597,4 +599,148 @@ void RegistrationWorker::run6DOF() {
     const bool canceled = cancelRequested_.load();
     emit registrationFinished(!canceled, T, prevRMS, 0,
         canceled ? "Canceled by user" : QString());
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CCCoreLib ICP: Uses the original Besl & McKay ICP from CCCoreLib
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void RegistrationWorker::runCCLibICP() {
+    const ViffImage& modelImg = cfg_.modelImg;
+    const ViffImage& dataImg  = cfg_.dataImg;
+    const RoiMask* modelRoi = cfg_.modelRoi.isEmpty() ? nullptr : &cfg_.modelRoi;
+    const RoiMask* dataRoi  = cfg_.dataRoi.isEmpty()  ? nullptr : &cfg_.dataRoi;
+
+    // Build point clouds
+    CCCoreLib::PointCloud modelCloud = buildCloud(modelImg, modelRoi);
+    CCCoreLib::PointCloud dataCloud  = buildCloud(dataImg, dataRoi);
+
+    if (modelCloud.size() < 3) {
+        emit registrationFinished(false, {}, 0.0, 0,
+            "Reference image: fewer than 3 valid points in ROI");
+        return;
+    }
+    if (dataCloud.size() < 3) {
+        emit registrationFinished(false, {}, 0.0, 0,
+            "Data image: fewer than 3 valid points in ROI");
+        return;
+    }
+
+    // Apply initial transform to data cloud
+    const Transformation3D& T0 = cfg_.initialTransform;
+    const double ca = std::cos(T0.alpha * M_PI / 180.0);
+    const double sa = std::sin(T0.alpha * M_PI / 180.0);
+    const double cb = std::cos(T0.beta  * M_PI / 180.0);
+    const double sb = std::sin(T0.beta  * M_PI / 180.0);
+    const double cg = std::cos(T0.gamma * M_PI / 180.0);
+    const double sg = std::sin(T0.gamma * M_PI / 180.0);
+
+    // Rotation matrix R = Rz(alpha) * Ry(beta) * Rx(gamma)
+    CCCoreLib::SquareMatrix R0(3);
+    R0.m_values[0][0] = static_cast<float>(ca * cb);
+    R0.m_values[0][1] = static_cast<float>(ca * sb * sg - sa * cg);
+    R0.m_values[0][2] = static_cast<float>(ca * sb * cg + sa * sg);
+    R0.m_values[1][0] = static_cast<float>(sa * cb);
+    R0.m_values[1][1] = static_cast<float>(sa * sb * sg + ca * cg);
+    R0.m_values[1][2] = static_cast<float>(sa * sb * cg - ca * sg);
+    R0.m_values[2][0] = static_cast<float>(-sb);
+    R0.m_values[2][1] = static_cast<float>(cb * sg);
+    R0.m_values[2][2] = static_cast<float>(cb * cg);
+
+    CCVector3 T0vec(static_cast<float>(T0.tx),
+                    static_cast<float>(T0.ty),
+                    static_cast<float>(T0.tz));
+
+    // Apply initial transform to data cloud
+    for (unsigned i = 0; i < dataCloud.size(); ++i) {
+        CCVector3 p = *dataCloud.getPoint(i);
+        CCVector3 p_t = R0 * p + T0vec;
+        const_cast<CCVector3*>(dataCloud.getPoint(i))->x = p_t.x;
+        const_cast<CCVector3*>(dataCloud.getPoint(i))->y = p_t.y;
+        const_cast<CCVector3*>(dataCloud.getPoint(i))->z = p_t.z;
+    }
+
+    // Configure CCCoreLib ICP parameters
+    CCCoreLib::ICPRegistrationTools::Parameters params;
+    params.convType = CCCoreLib::ICPRegistrationTools::MAX_ITER_CONVERGENCE;
+    params.nbMaxIterations = static_cast<unsigned>(cfg_.maxIterations);
+    params.minRMSDecrease = cfg_.minRMSDecrease;
+    params.adjustScale = false;  // Don't adjust scale for dental scans
+    params.filterOutFarthestPoints = true;  // Helps with partial overlap
+    params.samplingLimit = static_cast<unsigned>(cfg_.samplingLimit);
+    params.finalOverlapRatio = cfg_.overlapRatio;
+    params.transformationFilters = CCCoreLib::RegistrationTools::SKIP_NONE;  // Full 6-DOF
+    params.maxThreadCount = 0;  // Use all available threads
+
+    // Run CCCoreLib ICP
+    CCCoreLib::PointProjectionTools::Transformation finalTrans;
+    double finalRMS = 0;
+    unsigned finalPointCount = 0;
+
+    CCCoreLib::ICPRegistrationTools::RESULT_TYPE result =
+        CCCoreLib::ICPRegistrationTools::Register(
+            &modelCloud,      // model (reference, won't move)
+            nullptr,          // no mesh
+            &dataCloud,       // data (will be aligned)
+            params,
+            finalTrans,
+            finalRMS,
+            finalPointCount,
+            this);            // progress callback
+
+    if (result >= CCCoreLib::ICPRegistrationTools::ICP_ERROR) {
+        QString errorMsg;
+        switch (result) {
+            case CCCoreLib::ICPRegistrationTools::ICP_ERROR_REGISTRATION_STEP:
+                errorMsg = "Registration step failed"; break;
+            case CCCoreLib::ICPRegistrationTools::ICP_ERROR_DIST_COMPUTATION:
+                errorMsg = "Distance computation failed"; break;
+            case CCCoreLib::ICPRegistrationTools::ICP_ERROR_NOT_ENOUGH_MEMORY:
+                errorMsg = "Not enough memory"; break;
+            case CCCoreLib::ICPRegistrationTools::ICP_ERROR_CANCELED_BY_USER:
+                errorMsg = "Canceled by user"; break;
+            case CCCoreLib::ICPRegistrationTools::ICP_ERROR_INVALID_INPUT:
+                errorMsg = "Invalid input"; break;
+            default:
+                errorMsg = QString("ICP error code %1").arg(static_cast<int>(result));
+        }
+        emit registrationFinished(false, {}, 0.0, 0, errorMsg);
+        return;
+    }
+
+    // Convert CCCoreLib transformation back to Transformation3D
+    // The CCCoreLib transformation includes the initial transform already applied
+    // finalTrans.R is the ICP refinement rotation, finalTrans.T is the translation
+
+    // Combine: Total = finalTrans * initialTrans
+    // R_total = R_icp * R_initial
+    // T_total = R_icp * T_initial + T_icp
+    //
+    // But since we pre-applied initialTrans to dataCloud, finalTrans is the total.
+
+    // Extract Euler angles from the rotation matrix (ZYX convention)
+    // R = Rz(alpha) * Ry(beta) * Rx(gamma)
+    const CCCoreLib::SquareMatrix& R = finalTrans.R;
+
+    double alpha, beta, gamma;
+    beta = std::asin(-R.m_values[2][0]);
+
+    if (std::abs(std::cos(beta)) > 1e-6) {
+        alpha = std::atan2(R.m_values[1][0], R.m_values[0][0]);
+        gamma = std::atan2(R.m_values[2][1], R.m_values[2][2]);
+    } else {
+        // Gimbal lock
+        alpha = std::atan2(-R.m_values[0][1], R.m_values[1][1]);
+        gamma = 0;
+    }
+
+    Transformation3D result3D;
+    result3D.alpha = alpha * 180.0 / M_PI;
+    result3D.beta  = beta  * 180.0 / M_PI;
+    result3D.gamma = gamma * 180.0 / M_PI;
+    result3D.tx = finalTrans.T.x;
+    result3D.ty = finalTrans.T.y;
+    result3D.tz = finalTrans.T.z;
+
+    emit registrationFinished(true, result3D, finalRMS, finalPointCount, QString());
 }

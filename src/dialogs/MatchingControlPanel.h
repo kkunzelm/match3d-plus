@@ -59,8 +59,9 @@ private slots:
     void onTargetLandmarkPicked(QPointF pt);
     void onTargetPickingDone();
     // Registration
-    void onAlign();   // 4-DOF: alpha + tx, ty, tz
-    void onRefine();  // 6-DOF: point-to-plane (Neugebauer)
+    void onAlign();      // 4-DOF: alpha + tx, ty, tz
+    void onRefine();     // 6-DOF: point-to-plane (Neugebauer)
+    void onCCLibICP();   // CCCoreLib ICP (full 6-DOF)
     void onStop();
     void onProgressUpdated(float percent);
     void onRegistrationFinished(bool ok, Transformation3D t,
@@ -113,9 +114,10 @@ private:
     QCheckBox*      cbMaxDiff_  = nullptr;  QDoubleSpinBox* sbMaxDiff_ = nullptr;
 
     // Action buttons (need member pointers to enable/disable during registration)
-    QPushButton*    btnAlign_    = nullptr;  // 4-DOF registration
-    QPushButton*    btnRefine_   = nullptr;  // 6-DOF point-to-plane
-    QPushButton*    btnStop_     = nullptr;
+    QPushButton*    btnAlign_     = nullptr;  // 4-DOF registration
+    QPushButton*    btnRefine_    = nullptr;  // 6-DOF point-to-plane
+    QPushButton*    btnCCLibICP_  = nullptr;  // CCCoreLib ICP
+    QPushButton*    btnStop_      = nullptr;
     QPushButton*    btnDiff_     = nullptr;
     QPushButton*    btnComplete_ = nullptr;
 
