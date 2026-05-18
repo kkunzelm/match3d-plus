@@ -225,20 +225,20 @@ void MainWindow::openImageWindow(ViffImage img, const QString& title) {
 }
 
 void MainWindow::onOpenViff() {
-    const QString path = QFileDialog::getOpenFileName(
+    const QStringList paths = QFileDialog::getOpenFileNames(
         this, "Open VIFF", lastDir_,
         "VIFF/XV Files (*.xv *.viff);;All Files (*)");
-    if (!path.isEmpty()) {
+    for (const QString& path : paths) {
         lastDir_ = QFileInfo(path).absolutePath();
         openFile(path);
     }
 }
 
 void MainWindow::onOpenPly() {
-    const QString path = QFileDialog::getOpenFileName(
+    const QStringList paths = QFileDialog::getOpenFileNames(
         this, "Open PLY", lastDir_,
         "PLY Files (*.ply);;All Files (*)");
-    if (!path.isEmpty()) {
+    for (const QString& path : paths) {
         lastDir_ = QFileInfo(path).absolutePath();
         openPlyFile(path);
     }
