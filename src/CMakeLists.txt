@@ -37,6 +37,8 @@ add_executable(match3d_v2
     registration/RegistrationWorker.cpp
     registration/DifferenceCalculator.h
     registration/DifferenceCalculator.cpp
+    registration/SVD3x3.h
+    registration/SVD3x3.cpp
     io/PlyIO.h
     io/PlyIO.cpp
 )

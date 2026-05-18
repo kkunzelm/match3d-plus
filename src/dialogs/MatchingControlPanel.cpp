@@ -653,16 +653,29 @@ void MatchingControlPanel::onDiffImage() {
     const float vMax  = static_cast<float>(sbMaxDiff_->value());
 
     ImageWindow* data = selectedData();
+    const RoiMask* targetRoi = target->roiMask().isEmpty() ? nullptr : &target->roiMask();
+    const RoiMask* dataRoi   = data->roiMask().isEmpty()   ? nullptr : &data->roiMask();
+
+    // Collect debug statistics
+    DifferenceCalculator::Stats diffStats;
     ViffImage diff = DifferenceCalculator::compute(
         target->image(), data->image(), t,
-        useMin, vMin, useMax, vMax);
+        targetRoi, dataRoi,
+        useMin, vMin, useMax, vMax,
+        &diffStats);
 
     const auto stats = ImageProcessor::computeStats(diff, nullptr);
 
     const QString title = QString("diff_%1_minus_%2")
         .arg(QFileInfo(target->imagePath()).baseName())
         .arg(QFileInfo(data->imagePath()).baseName());
-    const QString statsText = ImageProcessor::formatStats(stats, title);
+
+    // Combine image stats with debug stats
+    QString statsText = ImageProcessor::formatStats(stats, title);
+    statsText += "\n" + DifferenceCalculator::formatStats(diffStats, target->image(), data->image());
+    statsText += QString("\nTransformation: alpha=%1, beta=%2, gamma=%3, tx=%4, ty=%5, tz=%6\n")
+        .arg(t.alpha, 0, 'f', 4).arg(t.beta, 0, 'f', 4).arg(t.gamma, 0, 'f', 4)
+        .arg(t.tx, 0, 'f', 4).arg(t.ty, 0, 'f', 4).arg(t.tz, 0, 'f', 4);
 
     QDialog dlg(this);
     dlg.setWindowTitle("Difference Image Statistics");
