@@ -193,13 +193,15 @@ MatchingControlPanel::MatchingControlPanel(
 
     // ── Action buttons ────────────────────────────────────────────────────────
     auto* actionRow = new QHBoxLayout;
-    btnMatch_    = new QPushButton("Match");
-    btnStop_     = new QPushButton("Stop");     btnStop_->setEnabled(false);
+    btnAlign_    = new QPushButton("Align");     // 4-DOF: alpha + tx,ty,tz
+    btnRefine_   = new QPushButton("Refine");    // 6-DOF: point-to-plane
+    btnStop_     = new QPushButton("Stop");      btnStop_->setEnabled(false);
     btnDiff_     = new QPushButton("Diff.img."); btnDiff_->setEnabled(false);
     btnComplete_ = new QPushButton("Complete");  btnComplete_->setEnabled(false);
     auto* btnOk      = new QPushButton("Ok");
     auto* btnCancel  = new QPushButton("Cancel");
-    actionRow->addWidget(btnMatch_);
+    actionRow->addWidget(btnAlign_);
+    actionRow->addWidget(btnRefine_);
     actionRow->addWidget(btnStop_);
     actionRow->addWidget(btnDiff_);
     actionRow->addWidget(btnComplete_);
@@ -219,7 +221,8 @@ MatchingControlPanel::MatchingControlPanel(
     connect(btnFromPoints_, &QPushButton::clicked, this, &MatchingControlPanel::onFromPoints);
     connect(btnFromCOM,     &QPushButton::clicked, this, &MatchingControlPanel::onFromCOM);
     connect(btnCancelPick_, &QPushButton::clicked, this, &MatchingControlPanel::onCancelPicking);
-    connect(btnMatch_,    &QPushButton::clicked, this, &MatchingControlPanel::onMatch);
+    connect(btnAlign_,    &QPushButton::clicked, this, &MatchingControlPanel::onAlign);
+    connect(btnRefine_,   &QPushButton::clicked, this, &MatchingControlPanel::onRefine);
     connect(btnStop_,     &QPushButton::clicked, this, &MatchingControlPanel::onStop);
     connect(btnDiff_,     &QPushButton::clicked, this, &MatchingControlPanel::onDiffImage);
     connect(btnComplete_, &QPushButton::clicked, this, &MatchingControlPanel::onCompleted);
@@ -529,21 +532,21 @@ void MatchingControlPanel::cancelPicking() {
     finishPicking();
 }
 
-// ── ICP registration ──────────────────────────────────────────────────────────
+// ── Align (4-DOF: alpha + tx, ty, tz) ─────────────────────────────────────────
 
-void MatchingControlPanel::onMatch() {
+void MatchingControlPanel::onAlign() {
     cancelPicking();
 
     ImageWindow* target = selectedTarget();
     if (!target) {
-        QMessageBox::information(this, "Match", "Please select a target/reference image.");
+        QMessageBox::information(this, "Align", "Please select a target/reference image.");
         return;
     }
     stopWorker();  // stop any previous run
 
     ImageWindow* data = selectedData();
     if (data == target) {
-        QMessageBox::information(this, "Match", "Target and data image must be different.");
+        QMessageBox::information(this, "Align", "Target and data image must be different.");
         return;
     }
 
@@ -576,9 +579,65 @@ void MatchingControlPanel::onMatch() {
     connect(workerThread_, &QThread::finished, worker_,       &QObject::deleteLater);
     connect(workerThread_, &QThread::finished, workerThread_, &QObject::deleteLater);
 
-    btnMatch_->setEnabled(false);
+    btnAlign_->setEnabled(false);
+    btnRefine_->setEnabled(false);
     btnStop_->setEnabled(true);
-    icpStatusLabel_->setText("ICP running…");
+    icpStatusLabel_->setText("Align (4-DOF) running...");
+    icpStatusLabel_->setVisible(true);
+
+    workerThread_->start();
+}
+
+// ── Refine (6-DOF point-to-plane) ─────────────────────────────────────────────
+
+void MatchingControlPanel::onRefine() {
+    cancelPicking();
+
+    ImageWindow* target = selectedTarget();
+    if (!target) {
+        QMessageBox::information(this, "Refine", "Please select a target/reference image.");
+        return;
+    }
+    stopWorker();  // stop any previous run
+
+    ImageWindow* data = selectedData();
+    if (data == target) {
+        QMessageBox::information(this, "Refine", "Target and data image must be different.");
+        return;
+    }
+
+    // Build worker config for 6-DOF refinement
+    RegistrationWorker::Config cfg;
+    cfg.modelImg         = target->image();
+    cfg.modelRoi         = target->roiMask();
+    cfg.dataImg          = data->image();
+    cfg.dataRoi          = data->roiMask();
+    cfg.initialTransform = currentTransform();
+    cfg.maxIterations    = sbIters_->value();
+    cfg.samplingLimit    = std::max(3, sbMinPs_->value());
+    cfg.minRMSDecrease   = 1.0e-5;
+    cfg.use6DOF          = true;  // Enable 6-DOF point-to-plane refinement
+
+    // Create worker and thread
+    workerThread_ = new QThread;
+    worker_       = new RegistrationWorker(std::move(cfg));
+    worker_->moveToThread(workerThread_);
+
+    connect(workerThread_, &QThread::started,
+            worker_,       &RegistrationWorker::run);
+    connect(worker_, &RegistrationWorker::progressUpdated,
+            this,    &MatchingControlPanel::onProgressUpdated);
+    connect(worker_, &RegistrationWorker::registrationFinished,
+            this,    &MatchingControlPanel::onRegistrationFinished);
+    connect(worker_, &RegistrationWorker::registrationFinished,
+            workerThread_, &QThread::quit);
+    connect(workerThread_, &QThread::finished, worker_,       &QObject::deleteLater);
+    connect(workerThread_, &QThread::finished, workerThread_, &QObject::deleteLater);
+
+    btnAlign_->setEnabled(false);
+    btnRefine_->setEnabled(false);
+    btnStop_->setEnabled(true);
+    icpStatusLabel_->setText("Refine (6-DOF point-to-plane) running...");
     icpStatusLabel_->setVisible(true);
 
     workerThread_->start();
@@ -613,7 +672,8 @@ void MatchingControlPanel::onRegistrationFinished(bool ok,
     worker_       = nullptr;
     workerThread_ = nullptr;
 
-    btnMatch_->setEnabled(true);
+    btnAlign_->setEnabled(true);
+    btnRefine_->setEnabled(true);
     btnStop_->setEnabled(false);
 
     if (ok) {

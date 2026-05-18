@@ -23,11 +23,12 @@ public:
         ViffImage dataImg;    // data cloud (will be aligned to model)
         RoiMask   dataRoi;    // empty = use all valid pixels
         Transformation3D initialTransform;  // coarse transform already computed
-        // ICP parameters
+        // Registration parameters
         int    maxIterations  = 8000;
         int    samplingLimit  = 50000;
         double overlapRatio   = 0.95;   // 1.0 = full overlap expected
         double minRMSDecrease = 1.0e-5;
+        bool   use6DOF        = false;  // false = 4-DOF (Align), true = 6-DOF (Refine)
     };
 
     explicit RegistrationWorker(Config cfg, QObject* parent = nullptr);
@@ -55,6 +56,8 @@ signals:
                               QString errorMsg);
 
 private:
+    void run4DOF();  // Align: 4-DOF (alpha + tx, ty, tz)
+    void run6DOF();  // Refine: 6-DOF point-to-plane (Neugebauer)
     static CCCoreLib::PointCloud buildCloud(const ViffImage& img, const RoiMask* roi);
 
     Config cfg_;
