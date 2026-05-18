@@ -4,6 +4,7 @@
 #include "../registration/CoarseRegistration.h"
 #include "../registration/RegistrationWorker.h"
 #include "../registration/Transformation3D.h"
+#include "../RoiMask.h"
 
 #include <QCloseEvent>
 #include <QDialog>
@@ -23,10 +24,14 @@ class ImageWindow;
 class MatchingControlPanel : public QDialog {
     Q_OBJECT
 public:
+    // Callback signature: openWindow(image, title, roiMask)
+    // roiMask is optional - if provided, it will be copied to the new window
+    using OpenWindowCallback = std::function<void(ViffImage, QString, const RoiMask*)>;
+
     explicit MatchingControlPanel(
         ImageWindow* owner,
         std::function<QVector<ImageWindow*>()> getWindows,
-        std::function<void(ViffImage, QString)> openWindow,
+        OpenWindowCallback openWindow,
         QWidget* parent = nullptr);
 
     // Read back current transformation parameters from spinboxes
@@ -80,7 +85,7 @@ private:
     ImageWindow* owner_;        // window that opened the panel (header identity only)
     ImageWindow* dataWindow_ = nullptr;  // data image captured when picking starts
     std::function<QVector<ImageWindow*>()> getWindows_;
-    std::function<void(ViffImage, QString)> openWindow_;
+    OpenWindowCallback openWindow_;
 
     // Target list
     QListWidget* targetList_ = nullptr;

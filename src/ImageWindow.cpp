@@ -67,6 +67,11 @@ void ImageWindow::applyRoiOp(std::function<void(RoiMask&)> op) {
     depthView_->roiChanged();
 }
 
+void ImageWindow::setRoiMask(const RoiMask& mask) {
+    roiMask_ = mask;
+    depthView_->roiChanged();
+}
+
 // ── Image processing helpers ──────────────────────────────────────────────────
 
 void ImageWindow::applyImgOp(std::function<void(ViffImage&)> op) {
@@ -202,10 +207,13 @@ void ImageWindow::showStatisticsDialog() {
     layout->addWidget(buttons);
 
     connect(saveBtn, &QPushButton::clicked, &dlg, [&]{
-        const QString path = QFileDialog::getSaveFileName(
+        QString path = QFileDialog::getSaveFileName(
             &dlg, "Save statistics", label + "_stats.txt",
             "Text files (*.txt);;All files (*)");
         if (path.isEmpty()) return;
+        // Auto-append .txt if no extension present
+        if (!path.contains('.'))
+            path += ".txt";
         QFile f(path);
         if (f.open(QIODevice::WriteOnly | QIODevice::Text))
             QTextStream(&f) << text;
@@ -241,8 +249,8 @@ void ImageWindow::showMatchingControlPanel() {
             [this]() -> QVector<ImageWindow*> {
                 return mainWindow_ ? mainWindow_->selectedPair() : QVector<ImageWindow*>{};
             },
-            [this](ViffImage img, QString title) {
-                if (mainWindow_) mainWindow_->openImageWindow(std::move(img), title);
+            [this](ViffImage img, QString title, const RoiMask* roiMask) {
+                if (mainWindow_) mainWindow_->openImageWindow(std::move(img), title, roiMask);
             },
             this);
         matchingPanel_->setAttribute(Qt::WA_DeleteOnClose);
@@ -650,20 +658,24 @@ void ImageWindow::createCentralWidget() {
     });
     connect(depthView_, &DepthImageView::pixelHovered, this,
             [this](int col, int row, float z) {
+                // Convert pixel coordinates to world coordinates (mm)
+                const float x_mm = col * image_.xPixelSize;
+                const float y_mm = row * image_.yPixelSize;
                 if (std::isnan(z))
-                    coordLabel_->setText(QString("x=%1  y=%2  z=---").arg(col).arg(row));
+                    coordLabel_->setText(QString("x=%1 mm  y=%2 mm  z=---")
+                        .arg(x_mm, 0, 'f', 3).arg(y_mm, 0, 'f', 3));
                 else
-                    coordLabel_->setText(
-                        QString("x=%1  y=%2  z=%3").arg(col).arg(row).arg(z, 0, 'f', 2));
+                    coordLabel_->setText(QString("x=%1 mm  y=%2 mm  z=%3 mm")
+                        .arg(x_mm, 0, 'f', 3).arg(y_mm, 0, 'f', 3).arg(z, 0, 'f', 4));
             });
     connect(depthView_, &DepthImageView::pixelLeft, this,
-            [this]{ coordLabel_->setText("x=        y=        z=        "); });
+            [this]{ coordLabel_->setText("x=         y=         z=         "); });
     connect(depthView_, &DepthImageView::polygonCompleted,
             this, &ImageWindow::onPolygonCompleted);
 }
 
 void ImageWindow::createStatusBar() {
-    coordLabel_ = new QLabel("x=        y=        z=        ");
+    coordLabel_ = new QLabel("x=         y=         z=         ");
     statusBar()->addWidget(coordLabel_);
 }
 

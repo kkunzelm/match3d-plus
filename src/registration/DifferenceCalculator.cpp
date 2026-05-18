@@ -15,18 +15,16 @@ QString DifferenceCalculator::formatStats(const Stats& s, const ViffImage& model
         "---\n"
         "Total model pixels:    %9\n"
         "Valid model pixels:    %10\n"
-        "In ROI:                %11\n"
-        "Out of bounds (data):  %12\n"
-        "Invalid data pixels:   %13\n"
-        "Filtered by min/max:   %14\n"
-        "Successful pixels:     %15\n")
+        "Out of bounds (data):  %11\n"
+        "Invalid data pixels:   %12\n"
+        "Filtered by min/max:   %13\n"
+        "Successful pixels:     %14\n")
         .arg(model.cols).arg(model.rows)
         .arg(model.xPixelSize, 0, 'g', 6).arg(model.yPixelSize, 0, 'g', 6)
         .arg(data.cols).arg(data.rows)
         .arg(data.xPixelSize, 0, 'g', 6).arg(data.yPixelSize, 0, 'g', 6)
         .arg(s.totalModelPixels)
         .arg(s.validModelPixels)
-        .arg(s.inRoiPixels)
         .arg(s.outOfBoundsData)
         .arg(s.invalidDataPixels)
         .arg(s.filteredByMinMax)
@@ -90,8 +88,6 @@ ViffImage DifferenceCalculator::compute(
     const ViffImage& model,
     const ViffImage& data,
     const Transformation3D& dataToModel,
-    const RoiMask* modelRoi,
-    const RoiMask* dataRoi,
     bool useMinDiff, float minDiff,
     bool useMaxDiff, float maxDiff,
     Stats* stats)
@@ -110,10 +106,6 @@ ViffImage DifferenceCalculator::compute(
     result.data.assign(static_cast<size_t>(model.rows) * model.cols,
                        std::numeric_limits<float>::quiet_NaN());
 
-    // Determine if ROI filtering is active
-    const bool useModelRoi = modelRoi && !modelRoi->isEmpty();
-    const bool useDataRoi  = dataRoi && !dataRoi->isEmpty();
-
     // Debug counters
     Stats localStats;
 
@@ -123,10 +115,6 @@ ViffImage DifferenceCalculator::compute(
 
             if (!model.isValid(row_m, col_m)) continue;
             ++localStats.validModelPixels;
-
-            // Skip pixels outside model ROI
-            if (useModelRoi && !modelRoi->isSelected(row_m, col_m)) continue;
-            ++localStats.inRoiPixels;
 
             const double x_m = col_m * model.xPixelSize;
             const double y_m = row_m * model.yPixelSize;
@@ -149,17 +137,6 @@ ViffImage DifferenceCalculator::compute(
                 row_d < 0 || row_d >= data.rows - 1) {
                 ++localStats.outOfBoundsData;
                 continue;
-            }
-
-            // Check data ROI - the projected pixel must be selected in the data image
-            if (useDataRoi) {
-                // Check the nearest pixel (rounded coordinates)
-                const uint32_t rd = static_cast<uint32_t>(std::round(row_d));
-                const uint32_t cd = static_cast<uint32_t>(std::round(col_d));
-                if (!dataRoi->isSelected(rd, cd)) {
-                    ++localStats.outOfBoundsData;  // reuse counter for "not in ROI"
-                    continue;
-                }
             }
 
             // Bilinear interpolation in data image

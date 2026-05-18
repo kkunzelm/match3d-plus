@@ -234,6 +234,7 @@ QRgb DepthImageView::colorForZ(float z) const {
         //   negative [clipMin_, 0] → red:  brightest red at clipMin_, black at 0
         //   positive [0, clipMax_] → gray: black at 0, white at clipMax_
         // This ensures both signs are always fully visible regardless of asymmetry.
+        // Values are clamped to the clip range for color mapping.
         const float zc = std::clamp(z, clipMin_, clipMax_);
         if (zc < 0.0f && clipMin_ < 0.0f)
             return qRgb(static_cast<int>(zc / clipMin_ * 255.0f), 0, 0);

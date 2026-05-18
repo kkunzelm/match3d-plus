@@ -218,11 +218,16 @@ void MainWindow::openFile(const QString& path) {
     openImageWindow(std::move(img), path);
 }
 
-void MainWindow::openImageWindow(ViffImage img, const QString& title) {
+void MainWindow::openImageWindow(ViffImage img, const QString& title,
+                                  const RoiMask* roiMask) {
     const int idx = nextIndex_++;
     auto* win = new ImageWindow(idx, title, std::move(img));
     win->setMainWindow(this);
     connect(win, &ImageWindow::windowClosing, this, &MainWindow::onImageWindowClosing);
+
+    // Copy ROI mask if provided
+    if (roiMask && !roiMask->isEmpty())
+        win->setRoiMask(*roiMask);
 
     if (idx >= imageWindows_.size())
         imageWindows_.resize(idx + 1, nullptr);

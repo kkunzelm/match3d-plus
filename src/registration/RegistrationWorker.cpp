@@ -283,6 +283,12 @@ void RegistrationWorker::run4DOF() {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void RegistrationWorker::run6DOF() {
+    // Standard point-to-plane ICP in MODEL space
+    // For each model point P_m with normal n_m:
+    // 1. Find corresponding data point by inverse-transforming to data space, sampling z
+    // 2. Transform data point to model space: P_d' = R * P_d + T
+    // 3. Minimize: sum of (n_m · (P_d' - P_m))²
+
     const ViffImage& modelImg = cfg_.modelImg;
     const ViffImage& dataImg  = cfg_.dataImg;
     const RoiMask* modelRoi = cfg_.modelRoi.isEmpty() ? nullptr : &cfg_.modelRoi;
@@ -310,9 +316,6 @@ void RegistrationWorker::run6DOF() {
     // For convergence checking
     double prevRMS = std::numeric_limits<double>::max();
     const int maxIter = std::max(1, cfg_.maxIterations);
-    constexpr int DELAY_OF_IMPROVEMENT = 50;
-    std::vector<double> qHistory(DELAY_OF_IMPROVEMENT, 1e10);
-    int delayIndex = 0;
 
     for (int iter = 0; iter < maxIter && !cancelRequested_.load(); ++iter) {
         emit progressUpdated(static_cast<float>(iter * 100.0 / maxIter));
@@ -326,6 +329,7 @@ void RegistrationWorker::run6DOF() {
         const double sg = std::sin(T.gamma * M_PI / 180.0);
 
         // Rotation matrix R = Rz(alpha) * Ry(beta) * Rx(gamma)
+        // This transforms data -> model
         double R[3][3];
         R[0][0] = ca * cb;
         R[0][1] = ca * sb * sg - sa * cg;
@@ -340,107 +344,144 @@ void RegistrationWorker::run6DOF() {
         // Build normal equations: A * delta = b
         // A is 6x6 symmetric, b is 6x1
         double A[6][6] = {{0}};
-        double b[6] = {0};
+        double bvec[6] = {0};
         double sumSqResidual = 0;
         size_t count = 0;
 
+        // Debug counters
+        size_t dbgTotal = 0, dbgInvalid = 0, dbgRoi = 0, dbgNeighbor = 0;
+        size_t dbgSlope = 0, dbgBounds = 0, dbgDataInvalid = 0, dbgDataRoi = 0;
+        size_t dbgOutlier = 0;
+
         // Outlier threshold from previous iteration
-        const double maxQ = 2.58 * prevRMS;  // 99% quantile for normal distribution
+        const double maxResidual = 3.0 * prevRMS;
 
         for (uint32_t mr = 1; mr + 1 < modelImg.rows; ++mr) {
             for (uint32_t mc = 1; mc + 1 < modelImg.cols; ++mc) {
-                if (!modelImg.isValid(mr, mc)) continue;
-                if (modelRoi && !modelRoi->isSelected(mr, mc)) continue;
+                ++dbgTotal;
+                if (!modelImg.isValid(mr, mc)) { ++dbgInvalid; continue; }
+                if (modelRoi && !modelRoi->isSelected(mr, mc)) { ++dbgRoi; continue; }
 
-                // Compute surface gradient at model point using central differences
+                // Compute surface normal at model point using central differences
                 if (!modelImg.isValid(mr, mc-1) || !modelImg.isValid(mr, mc+1) ||
-                    !modelImg.isValid(mr-1, mc) || !modelImg.isValid(mr+1, mc))
-                    continue;
+                    !modelImg.isValid(mr-1, mc) || !modelImg.isValid(mr+1, mc)) {
+                    ++dbgNeighbor; continue;
+                }
 
-                const double zx = (modelImg.at(mr, mc+1) - modelImg.at(mr, mc-1)) /
-                                  (2.0 * modelImg.xPixelSize);
-                const double zy = (modelImg.at(mr+1, mc) - modelImg.at(mr-1, mc)) /
-                                  (2.0 * modelImg.yPixelSize);
+                const double dzdx = (modelImg.at(mr, mc+1) - modelImg.at(mr, mc-1)) /
+                                    (2.0 * modelImg.xPixelSize);
+                const double dzdy = (modelImg.at(mr+1, mc) - modelImg.at(mr-1, mc)) /
+                                    (2.0 * modelImg.yPixelSize);
 
-                // Skip steep slopes (shadow areas)
-                const double norm = std::sqrt(zx*zx + zy*zy + 1.0);
-                if (norm > 180.0 / M_PI / 15.0)  // > 75 degree slope
-                    continue;
+                // Skip extremely steep slopes (near-vertical surfaces)
+                const double gradient = std::sqrt(dzdx*dzdx + dzdy*dzdy);
+                const double slopeAngle = std::atan(gradient) * 180.0 / M_PI;
+                if (slopeAngle > 89.0) {  // Only filter near-vertical (was 75°)
+                    ++dbgSlope; continue;
+                }
 
-                // Model point in world coordinates
-                const double mx_orig = static_cast<double>(mc) * modelImg.xPixelSize;
-                const double my_orig = static_cast<double>(mr) * modelImg.yPixelSize;
-                const double mz_orig = static_cast<double>(modelImg.at(mr, mc));
+                // Model point (target) in world coordinates
+                const double qx = static_cast<double>(mc) * modelImg.xPixelSize;
+                const double qy = static_cast<double>(mr) * modelImg.yPixelSize;
+                const double qz = static_cast<double>(modelImg.at(mr, mc));
 
-                // Transform model point: P' = R * P + T
-                const double x = R[0][0]*mx_orig + R[0][1]*my_orig + R[0][2]*mz_orig + T.tx;
-                const double y = R[1][0]*mx_orig + R[1][1]*my_orig + R[1][2]*mz_orig + T.ty;
-                const double z = R[2][0]*mx_orig + R[2][1]*my_orig + R[2][2]*mz_orig + T.tz;
+                // Model surface normal (unnormalized, pointing up)
+                // n = (-dz/dx, -dz/dy, 1)
+                const double nx = -dzdx;
+                const double ny = -dzdy;
+                const double nz = 1.0;
+                const double nlen = std::sqrt(nx*nx + ny*ny + nz*nz);
+
+                // Inverse transform to find where to sample in data image
+                // P_data = R^T * (P_model - T)
+                const double dx = qx - T.tx;
+                const double dy = qy - T.ty;
+                const double dz_approx = qz - T.tz;  // approximate, will refine
+
+                // R^T * (P_m - T) gives data space coordinates
+                const double data_x = R[0][0]*dx + R[1][0]*dy + R[2][0]*dz_approx;
+                const double data_y = R[0][1]*dx + R[1][1]*dy + R[2][1]*dz_approx;
 
                 // Convert to data pixel coordinates
-                const double dc = x / dataImg.xPixelSize;
-                const double dr = y / dataImg.yPixelSize;
+                const double dc = data_x / dataImg.xPixelSize;
+                const double dr = data_y / dataImg.yPixelSize;
 
                 // Check bounds
-                if (dc < 0 || dc >= dataImg.cols - 1 || dr < 0 || dr >= dataImg.rows - 1)
-                    continue;
+                if (dc < 0 || dc >= dataImg.cols - 1 || dr < 0 || dr >= dataImg.rows - 1) {
+                    ++dbgBounds; continue;
+                }
 
-                // Bilinear interpolation in data image
+                // Bilinear interpolation to sample z from data image
                 const uint32_t c0 = static_cast<uint32_t>(dc);
                 const uint32_t r0 = static_cast<uint32_t>(dr);
                 const uint32_t c1 = c0 + 1;
                 const uint32_t r1 = r0 + 1;
 
                 if (!dataImg.isValid(r0, c0) || !dataImg.isValid(r0, c1) ||
-                    !dataImg.isValid(r1, c0) || !dataImg.isValid(r1, c1))
-                    continue;
+                    !dataImg.isValid(r1, c0) || !dataImg.isValid(r1, c1)) {
+                    ++dbgDataInvalid; continue;
+                }
 
                 if (dataRoi && (!dataRoi->isSelected(r0, c0) || !dataRoi->isSelected(r0, c1) ||
-                               !dataRoi->isSelected(r1, c0) || !dataRoi->isSelected(r1, c1)))
-                    continue;
+                               !dataRoi->isSelected(r1, c0) || !dataRoi->isSelected(r1, c1))) {
+                    ++dbgDataRoi; continue;
+                }
 
                 const double fc = dc - c0;
                 const double fr = dr - r0;
-                const double f = (1-fr) * ((1-fc) * dataImg.at(r0, c0) + fc * dataImg.at(r0, c1))
-                               + fr * ((1-fc) * dataImg.at(r1, c0) + fc * dataImg.at(r1, c1));
+                const double data_z = (1-fr) * ((1-fc) * dataImg.at(r0, c0) + fc * dataImg.at(r0, c1))
+                                    + fr * ((1-fc) * dataImg.at(r1, c0) + fc * dataImg.at(r1, c1));
 
-                // Transform surface normal: n' = R * n (normals transform by rotation only)
-                // Original normal: (-zx, -zy, 1) / norm
-                const double nx = -zx / norm;
-                const double ny = -zy / norm;
-                const double nz = 1.0 / norm;
+                // Data point (source) in data coordinates
+                const double px = data_x;
+                const double py = data_y;
+                const double pz = data_z;
 
-                // Transformed normal components
-                const double a = R[0][0]*nx + R[0][1]*ny + R[0][2]*nz;
-                const double bc = R[1][0]*nx + R[1][1]*ny + R[1][2]*nz;
-                const double c = R[2][0]*nx + R[2][1]*ny + R[2][2]*nz;
+                // Transform data point to model space: P' = R * P + T
+                const double px_t = R[0][0]*px + R[0][1]*py + R[0][2]*pz + T.tx;
+                const double py_t = R[1][0]*px + R[1][1]*py + R[1][2]*pz + T.ty;
+                const double pz_t = R[2][0]*px + R[2][1]*py + R[2][2]*pz + T.tz;
 
-                // Out of sight? (normal pointing away)
-                if (c < 0.0)
-                    continue;
-
-                // Point-to-plane residual
-                const double residual = c * (f - z);
+                // Point-to-plane residual in model space: r = n · (P' - Q)
+                const double residual = (nx * (px_t - qx) + ny * (py_t - qy) + nz * (pz_t - qz)) / nlen;
 
                 // Outlier detection
-                if (std::abs(residual) > maxQ)
-                    continue;
+                if (std::abs(residual) > maxResidual) {
+                    ++dbgOutlier; continue;
+                }
 
-                // Build row of the design matrix (Neugebauer's formulation)
+                // Linearized point-to-plane ICP Jacobian
+                // r ≈ n · (P' - Q) where P' = R*P + T
+                // For small angle updates: R ≈ I + [ω]×
+                // dr/dω = n · (ω × P) = (P × n) · ω
+                // dr/dt = n
+                //
+                // So Jacobian row = [(P × n), n] for parameters (ωx, ωy, ωz, tx, ty, tz)
+                // But we use Euler angles, so we need the chain rule.
+                // For small angles: ωx ≈ gamma, ωy ≈ beta, ωz ≈ alpha (in radians)
+
+                // Cross product P × n (using transformed point P')
+                const double cpx = py_t * nz - pz_t * ny;  // (P × n).x
+                const double cpy = pz_t * nx - px_t * nz;  // (P × n).y
+                const double cpz = px_t * ny - py_t * nx;  // (P × n).z
+
+                // Jacobian row: [d/d_gamma, d/d_beta, d/d_alpha, d/d_tx, d/d_ty, d/d_tz]
+                // Note: angles are in degrees, so we scale by π/180
+                const double deg2rad = M_PI / 180.0;
                 double row[6];
-                row[0] = c * y - bc * f;    // ∂/∂gamma
-                row[1] = a * f - c * x;     // ∂/∂beta
-                row[2] = bc * x - a * y;    // ∂/∂alpha
-                row[3] = a;                  // ∂/∂tx
-                row[4] = bc;                 // ∂/∂ty
-                row[5] = c;                  // ∂/∂tz
+                row[0] = cpx / nlen * deg2rad;  // ∂r/∂gamma (rotation around x)
+                row[1] = cpy / nlen * deg2rad;  // ∂r/∂beta (rotation around y)
+                row[2] = cpz / nlen * deg2rad;  // ∂r/∂alpha (rotation around z)
+                row[3] = nx / nlen;              // ∂r/∂tx
+                row[4] = ny / nlen;              // ∂r/∂ty
+                row[5] = nz / nlen;              // ∂r/∂tz
 
                 // Accumulate normal equations: A += row * row^T, b += row * residual
                 for (int i = 0; i < 6; ++i) {
                     for (int j = i; j < 6; ++j) {
                         A[i][j] += row[i] * row[j];
                     }
-                    b[i] += row[i] * residual;
+                    bvec[i] -= row[i] * residual;  // Note: negative because we minimize
                 }
 
                 sumSqResidual += residual * residual;
@@ -450,21 +491,23 @@ void RegistrationWorker::run6DOF() {
 
         if (count < 10) {
             emit registrationFinished(false, {}, 0.0, 0,
-                QString("Iteration %1: fewer than 10 corresponding points").arg(iter));
+                QString("Iteration %1: fewer than 10 corresponding points\n"
+                        "Debug: total=%2, invalid=%3, roi=%4, neighbor=%5, slope=%6\n"
+                        "bounds=%7, dataInvalid=%8, dataRoi=%9, outlier=%10, count=%11")
+                    .arg(iter)
+                    .arg(dbgTotal).arg(dbgInvalid).arg(dbgRoi).arg(dbgNeighbor).arg(dbgSlope)
+                    .arg(dbgBounds).arg(dbgDataInvalid).arg(dbgDataRoi).arg(dbgOutlier).arg(count));
             return;
         }
 
         // Compute RMS
         const double rms = std::sqrt(sumSqResidual / count);
 
-        // Check for improvement (ring buffer of last N iterations)
-        if (rms >= qHistory[delayIndex]) {
-            // No improvement in the last DELAY_OF_IMPROVEMENT iterations
+        // Check for convergence
+        if (rms < 1e-6 || (iter > 0 && std::abs(rms - prevRMS) < 1e-6 * rms)) {
             emit registrationFinished(true, T, rms, static_cast<unsigned>(count), QString());
             return;
         }
-        qHistory[delayIndex] = rms;
-        delayIndex = (delayIndex + 1) % DELAY_OF_IMPROVEMENT;
 
         // Fill symmetric part of A
         for (int i = 0; i < 6; ++i) {
@@ -473,7 +516,7 @@ void RegistrationWorker::run6DOF() {
             }
         }
 
-        // Solve A * delta = b using Cholesky decomposition
+        // Solve A * delta = bvec using Cholesky decomposition
         // First, Cholesky factorization: A = L * L^T
         double L[6][6] = {{0}};
         bool singular = false;
@@ -496,16 +539,16 @@ void RegistrationWorker::run6DOF() {
         }
 
         if (singular) {
-            // System is singular, stop
+            // System is singular, stop with current best
             emit registrationFinished(true, T, rms, static_cast<unsigned>(count),
                 "Normal equations singular - stopping");
             return;
         }
 
-        // Forward substitution: L * y = b
+        // Forward substitution: L * y = bvec
         double y[6];
         for (int i = 0; i < 6; ++i) {
-            double sum = b[i];
+            double sum = bvec[i];
             for (int j = 0; j < i; ++j) {
                 sum -= L[i][j] * y[j];
             }
@@ -523,29 +566,26 @@ void RegistrationWorker::run6DOF() {
         }
 
         // Check solution magnitude (prevent divergence)
-        double solutionNorm = 0;
-        for (int i = 0; i < 6; ++i) {
-            solutionNorm += delta[i] * delta[i];
-        }
-        solutionNorm = std::sqrt(solutionNorm);
+        // delta[0-2] are in degrees, delta[3-5] are in mm
+        const double angleDelta = std::sqrt(delta[0]*delta[0] + delta[1]*delta[1] + delta[2]*delta[2]);
+        const double transDelta = std::sqrt(delta[3]*delta[3] + delta[4]*delta[4] + delta[5]*delta[5]);
 
-        if (solutionNorm > 20.0) {
-            // Solution too large, likely diverging
-            emit registrationFinished(true, T, rms, static_cast<unsigned>(count),
-                "Solution diverging - stopping");
-            return;
+        if (angleDelta > 10.0 || transDelta > 50.0) {
+            // Solution too large, likely diverging - use damping
+            const double damping = 0.1;
+            for (int i = 0; i < 6; ++i) delta[i] *= damping;
         }
 
-        // Update transform parameters
-        T.gamma += delta[0] * 180.0 / M_PI;
-        T.beta  += delta[1] * 180.0 / M_PI;
-        T.alpha += delta[2] * 180.0 / M_PI;
+        // Update transform parameters (deltas are directly in degrees and mm)
+        T.gamma += delta[0];
+        T.beta  += delta[1];
+        T.alpha += delta[2];
         T.tx    += delta[3];
         T.ty    += delta[4];
         T.tz    += delta[5];
 
-        // Check convergence based on solution norm
-        if (solutionNorm < cfg_.minRMSDecrease && iter > 0) {
+        // Check convergence based on update magnitude
+        if (angleDelta < 0.001 && transDelta < 0.001 && iter > 0) {
             emit registrationFinished(true, T, rms, static_cast<unsigned>(count), QString());
             return;
         }

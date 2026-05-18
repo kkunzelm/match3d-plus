@@ -233,9 +233,12 @@ void HistogramDialog::applyMax(float z) {
 }
 
 void HistogramDialog::onSave() {
-    const QString path = QFileDialog::getSaveFileName(
+    QString path = QFileDialog::getSaveFileName(
         this, "Save histogram", QString(), "Text files (*.txt);;All files (*)");
     if (path.isEmpty()) return;
+    // Auto-append .txt if no extension present
+    if (!path.contains('.'))
+        path += ".txt";
 
     QFile f(path);
     if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {

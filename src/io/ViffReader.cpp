@@ -121,6 +121,38 @@ bool ViffReader::load(const std::string& path, ViffImage& img) {
         for (auto& v : img.data) byteSwap4(&v);
     }
 
+    // Unit conversion for dental scan data:
+    // VIFF stores pixel sizes in meters, but z values are typically in µm.
+    // Convert everything to mm for practical use:
+    // - Pixel sizes: meters → mm (multiply by 1000)
+    // - Z values: µm → mm (divide by 1000)
+    //
+    // Heuristic: if pixel sizes are very small (< 0.001, i.e., < 1mm in meters)
+    // and z values are large (> 1000), assume meters/µm convention.
+    float zMin = 1e30f, zMax = -1e30f;
+    for (const float v : img.data) {
+        if (v > 0.0f && std::isfinite(v)) {
+            zMin = std::min(zMin, v);
+            zMax = std::max(zMax, v);
+        }
+    }
+
+    const bool pixelSizeInMeters = (img.xPixelSize < 0.001f && img.xPixelSize > 0.0f);
+    const bool zLikelyMicrons = (zMax > 1000.0f);  // z values > 1000 suggest µm
+
+    if (pixelSizeInMeters && zLikelyMicrons) {
+        // Convert pixel sizes from meters to mm
+        img.xPixelSize *= 1000.0f;
+        img.yPixelSize *= 1000.0f;
+        img.originX *= 1000.0f;
+        img.originY *= 1000.0f;
+
+        // Convert z values from µm to mm
+        for (auto& v : img.data) {
+            if (v != 0.0f) v /= 1000.0f;
+        }
+    }
+
     // Auto-detect difference images: if any finite non-zero pixel is negative,
     // this cannot be a plain depth image (where zero means "no scan" and valid
     // pixels are always positive). Mark it so isValid() doesn't reject negatives.

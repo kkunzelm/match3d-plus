@@ -60,3 +60,7 @@ target_include_directories(match3d_v2
 # ── VIFF round-trip test (no Qt dependency) ───────────────────────────────────
 add_executable(viff_test io/viff_test.cpp)
 target_link_libraries(viff_test PRIVATE viff_io)
+
+# ── Synthetic test data generator ─────────────────────────────────────────────
+add_executable(synthetic_test_data tools/SyntheticTestData.cpp)
+target_link_libraries(synthetic_test_data PRIVATE viff_io)

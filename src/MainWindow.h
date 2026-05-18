@@ -4,6 +4,7 @@
 #include <QVector>
 #include "AppSettings.h"
 #include "io/ViffReader.h"
+#include "RoiMask.h"
 
 class QCloseEvent;
 class QListWidget;
@@ -19,7 +20,9 @@ public:
     void openFile(const QString& path);
 
     // Open a computed (in-memory) image as a new window
-    void openImageWindow(ViffImage img, const QString& title);
+    // If roiMask is provided, it will be copied to the new window's ROI mask
+    void openImageWindow(ViffImage img, const QString& title,
+                         const RoiMask* roiMask = nullptr);
 
     // Returns all currently open (non-null) image windows
     QVector<ImageWindow*> imageWindows() const;

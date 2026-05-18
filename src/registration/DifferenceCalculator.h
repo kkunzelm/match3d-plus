@@ -1,7 +1,6 @@
 #pragma once
 
 #include "../io/ViffReader.h"
-#include "../RoiMask.h"
 #include "Transformation3D.h"
 
 #include <QString>
@@ -13,7 +12,6 @@ public:
     struct Stats {
         uint64_t totalModelPixels = 0;
         uint64_t validModelPixels = 0;
-        uint64_t inRoiPixels = 0;
         uint64_t outOfBoundsData = 0;
         uint64_t invalidDataPixels = 0;
         uint64_t filteredByMinMax = 0;
@@ -22,15 +20,14 @@ public:
 
     // Compute z_model − z_data_in_model_space for each model pixel.
     // transform = data→model (spinbox values from MatchingControlPanel).
-    // modelRoi/dataRoi: if non-null and non-empty, only pixels inside ROI are processed.
+    // ROI filtering is NOT applied here - difference is computed for ALL valid pixels.
+    // Use the ROI on the resulting difference image for analysis/statistics.
     // Output isDiffImage=true, invalid pixels = NaN.
     // If stats is non-null, debug statistics are written there.
     static ViffImage compute(
         const ViffImage& model,
         const ViffImage& data,
         const Transformation3D& dataToModel,
-        const RoiMask* modelRoi = nullptr,
-        const RoiMask* dataRoi = nullptr,
         bool useMinDiff = false, float minDiff = 0.0f,
         bool useMaxDiff = false, float maxDiff = 0.0f,
         Stats* stats = nullptr);

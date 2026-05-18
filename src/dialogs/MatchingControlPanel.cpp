@@ -30,7 +30,7 @@
 MatchingControlPanel::MatchingControlPanel(
     ImageWindow* owner,
     std::function<QVector<ImageWindow*>()> getWindows,
-    std::function<void(ViffImage, QString)> openWindow,
+    OpenWindowCallback openWindow,
     QWidget* parent)
     : QDialog(parent)
     , owner_(owner)
@@ -713,14 +713,14 @@ void MatchingControlPanel::onDiffImage() {
     const float vMax  = static_cast<float>(sbMaxDiff_->value());
 
     ImageWindow* data = selectedData();
-    const RoiMask* targetRoi = target->roiMask().isEmpty() ? nullptr : &target->roiMask();
-    const RoiMask* dataRoi   = data->roiMask().isEmpty()   ? nullptr : &data->roiMask();
 
     // Collect debug statistics
+    // Note: ROI filtering is NOT applied during difference computation.
+    // The difference is computed for ALL valid pixels. Use the ROI on the
+    // resulting difference image for analysis/statistics.
     DifferenceCalculator::Stats diffStats;
     ViffImage diff = DifferenceCalculator::compute(
         target->image(), data->image(), t,
-        targetRoi, dataRoi,
         useMin, vMin, useMax, vMax,
         &diffStats);
 
@@ -750,10 +750,13 @@ void MatchingControlPanel::onDiffImage() {
     buttons->addButton(QDialogButtonBox::Close);
     layout->addWidget(buttons);
     connect(saveBtn, &QPushButton::clicked, &dlg, [&]{
-        const QString path = QFileDialog::getSaveFileName(
+        QString path = QFileDialog::getSaveFileName(
             &dlg, "Save statistics", title + "_stats.txt",
             "Text files (*.txt);;All files (*)");
         if (path.isEmpty()) return;
+        // Auto-append .txt if no extension present
+        if (!path.contains('.'))
+            path += ".txt";
         QFile f(path);
         if (f.open(QIODevice::WriteOnly | QIODevice::Text))
             QTextStream(&f) << statsText;
@@ -763,7 +766,9 @@ void MatchingControlPanel::onDiffImage() {
     connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::accept);
     dlg.exec();
 
-    if (openWindow_) openWindow_(std::move(diff), title);
+    // Pass target's ROI mask to the difference image window
+    const RoiMask* targetRoi = target->roiMask().isEmpty() ? nullptr : &target->roiMask();
+    if (openWindow_) openWindow_(std::move(diff), title, targetRoi);
 }
 
 void MatchingControlPanel::onCompleted() {
@@ -780,5 +785,5 @@ void MatchingControlPanel::onCompleted() {
     const QString title = QString("completed_%1")
         .arg(QFileInfo(target->imagePath()).baseName());
 
-    if (openWindow_) openWindow_(std::move(completed), title);
+    if (openWindow_) openWindow_(std::move(completed), title, nullptr);
 }
