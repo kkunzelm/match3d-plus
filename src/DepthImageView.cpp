@@ -142,9 +142,13 @@ void DepthImageView::rebuildImage() {
             if (!valid || (!selected && roiOnly_)) {
                 line[c] = qRgb(0, 0, 0);
             } else if (!selected) {
-                // Deselected pixels in "All" mode: 25% brightness
+                // Deselected pixels: blend with red tint (preserves detail visibility)
                 QRgb col = colorForZ(image_.at(ur, uc));
-                line[c] = qRgb(qRed(col) / 4, qGreen(col) / 4, qBlue(col) / 4);
+                // 70% original + 30% red overlay
+                const int r = std::min(255, qRed(col)   * 7 / 10 + 77);
+                const int g = qGreen(col) * 7 / 10;
+                const int b = qBlue(col)  * 7 / 10;
+                line[c] = qRgb(r, g, b);
             } else {
                 line[c] = colorForZ(image_.at(ur, uc));
             }
@@ -206,10 +210,16 @@ void DepthImageView::rebuildGrayCast() {
             const float  cos_v = static_cast<float>(std::cos(theta));
             int gray = (cos_v < 1.0f) ? static_cast<int>(cos_v * 255.0f) : 0;
 
-            if (roiMask_ && !roiMask_->isSelected(ur, uc))
-                gray /= 4;
-
-            line[c] = qRgb(gray, gray, gray);
+            if (roiMask_ && !roiMask_->isSelected(ur, uc)) {
+                // Deselected pixels: blend with red tint (preserves detail visibility)
+                // 70% original gray + 30% red overlay
+                const int r = std::min(255, gray * 7 / 10 + 77);
+                const int g = gray * 7 / 10;
+                const int b = gray * 7 / 10;
+                line[c] = qRgb(r, g, b);
+            } else {
+                line[c] = qRgb(gray, gray, gray);
+            }
         }
     }
 }
