@@ -321,11 +321,16 @@ void MainWindow::onGlobalParameters() {
 }
 
 void MainWindow::onAbout() {
-    QMessageBox::about(this, "About match3d_v2",
-        "<b>match3d_v2</b><br>"
-        "3D surface registration for dental wear analysis.<br><br>"
-        "Re-implementation of Match3D 2.5 (Wolfram Gloger).<br>"
-        "Uses CCCoreLib (CloudCompare) for ICP registration.");
+    QMessageBox::about(this, "About Match3D v2",
+        "<h3>Match3D v2</h3>"
+        "<p>3D surface registration and wear analysis for dental research.</p>"
+        "<p><b>Author:</b><br>"
+        "Prof. Dr. Karl-Heinz Kunzelmann<br>"
+        "LMU Munich</p>"
+        "<p><b>Based on:</b><br>"
+        "Match3D 2.5 by Wolfram Gloger</p>"
+        "<p><b>Libraries:</b><br>"
+        "Qt 6, CCCoreLib (CloudCompare)</p>");
 }
 
 void MainWindow::onImage1SelectionChanged(QListWidgetItem* current) {
