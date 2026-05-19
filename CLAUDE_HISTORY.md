@@ -109,7 +109,7 @@ This file documents the development history of Match3D v2, a Qt6/C++20 re-implem
   - `filterOutFarthestPoints = true` (helps with partial overlap)
   - `adjustScale = false` (no scale changes for dental scans)
 
-### (current) - Add Surface Fitting (Fit Plane, Fit Sphere)
+### 05689a6 - Add Surface Fitting (Fit Plane, Fit Sphere)
 - **New Process → Fit Surface submenu** with two fitting operations:
   - **Fit Plane**: Least-squares plane fitting (z = Ax + By + C)
   - **Fit Sphere**: Iterative Gauss-Newton sphere fitting
@@ -131,6 +131,35 @@ This file documents the development history of Match3D v2, a Qt6/C++20 re-implem
   - `docs/surface-fitting-technical.md` - Algorithm details and math
 - Based on original Java implementation (FitPlaneCubicSphere_.java)
 
+### (current) - Fix sphere fitting, add volume statistics, add wear sample generator
+- **Fixed CCCoreLib ICP transformation composition**:
+  - Bug: Initial transform was pre-applied to data cloud but not composed with ICP result
+  - Fix: Properly compute R_total = R_icp × R0 and T_total = R_icp × T0 + T_icp
+- **Fixed sphere fitting algorithm**:
+  - Bug: Sign error in Gauss-Newton update caused divergence
+  - Fix: Correctly compute J^T × (radius - r) instead of J^T × (r - radius)
+  - Now matches the original Java implementation exactly
+  - Convergence tolerance: 10⁻⁸, max iterations: 500
+- **Fixed sphere subtraction**:
+  - Changed from `z_data - z_sphere` to `z_sphere - z_data`
+  - Positive values now indicate material missing (wear facet)
+  - Points outside sphere projection set to zero
+- **Fixed convex/concave auto-detection**:
+  - Changed from `l > zMean` to `l < zMean` for correct orientation
+- **Added volume calculation to Statistics**:
+  - `PosVolume`: Sum of z × pixelArea for z > 0 (mm³)
+  - `NegVolume`: Sum of |z| × pixelArea for z < 0 (mm³)
+  - `PosPixels` / `NegPixels`: Pixel counts
+  - Useful for measuring wear volume after surface subtraction
+- **New tool: `generate_wear_samples`**:
+  - Generates synthetic VIFF files for testing surface fitting
+  - `depression` mode: Flat plane with spherical cavity (wear simulation)
+  - `dome` mode: Flat plane with truncated hemisphere (antagonist simulation)
+  - Configurable size, pixel size, sphere diameter, truncation, noise
+- **Documentation**:
+  - `docs/synthetic-test-data.md` - Complete guide for test data generators
+  - Updated user manuals with volume calculation documentation
+
 ---
 
 ## Architecture Notes
@@ -143,6 +172,7 @@ This file documents the development history of Match3D v2, a Qt6/C++20 re-implem
 | `src/ImageWindow.cpp` | Individual image display window with ROI tools |
 | `src/DepthImageView.cpp` | Image rendering (color mapping, Graycast) |
 | `src/ImageProcessor.cpp` | Image processing: filters, statistics, surface fitting |
+| `src/tools/GenerateWearSamples.cpp` | Synthetic wear sample generator (depression, dome) |
 | `src/registration/RegistrationWorker.cpp` | ICP algorithms (4-DOF, 6-DOF, CCCoreLib ICP) |
 | `src/registration/CoarseRegistration.cpp` | COM and landmark-based alignment |
 | `src/dialogs/MatchingControlPanel.cpp` | Registration UI controls |

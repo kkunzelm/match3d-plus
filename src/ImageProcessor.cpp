@@ -226,6 +226,9 @@ ImageProcessor::Stats ImageProcessor::computeStats(const ViffImage& img,
     s.validCount = static_cast<uint32_t>(vals.size());
     if (vals.empty()) return s;
 
+    // Pixel area for volume calculation (mm²)
+    s.pixelArea = static_cast<double>(img.xPixelSize) * static_cast<double>(img.yPixelSize);
+
     std::sort(vals.begin(), vals.end());
     s.min = vals.front();
     s.max = vals.back();
@@ -241,8 +244,27 @@ ImageProcessor::Stats ImageProcessor::computeStats(const ViffImage& img,
     s.q98 = pct(98);
 
     double sum = 0;
-    for (float v : vals) sum += v;
+    double posVol = 0;
+    double negVol = 0;
+    uint32_t posCount = 0;
+    uint32_t negCount = 0;
+
+    for (float v : vals) {
+        sum += v;
+        if (v > 0) {
+            posVol += v;
+            ++posCount;
+        } else if (v < 0) {
+            negVol += (-v);  // Store as positive value
+            ++negCount;
+        }
+    }
+
     s.mean = static_cast<float>(sum / vals.size());
+    s.positiveVolume = posVol * s.pixelArea;  // z * area = volume (mm³)
+    s.negativeVolume = negVol * s.pixelArea;
+    s.positiveCount = posCount;
+    s.negativeCount = negCount;
 
     double var = 0;
     for (float v : vals) var += static_cast<double>(v - s.mean) * (v - s.mean);
@@ -256,7 +278,7 @@ QString ImageProcessor::formatStats(const Stats& s, const QString& imageLabel) {
     auto row = [](const char* key, double val, int decimals = 4) -> QString {
         return QString("%1 = %2\n").arg(key, -14).arg(val, 0, 'f', decimals);
     };
-    return QString("# match3d statistics\n"
+    QString result = QString("# match3d statistics\n"
                    "# Image: %1\n"
                    "# Date:  %2\n"
                    "ValidPixels    = %3\n")
@@ -272,6 +294,16 @@ QString ImageProcessor::formatStats(const Stats& s, const QString& imageLabel) {
            + row("Q90",    s.q90)
            + row("Q95",    s.q95)
            + row("Q98",    s.q98);
+
+    // Add volume statistics (useful for difference images)
+    result += QString("# Volume (mm³) - for difference/subtracted images\n");
+    result += QString("PixelArea      = %1 mm²\n").arg(s.pixelArea, 0, 'e', 4);
+    result += QString("PosPixels      = %1\n").arg(s.positiveCount);
+    result += QString("NegPixels      = %1\n").arg(s.negativeCount);
+    result += QString("PosVolume      = %1 mm³\n").arg(s.positiveVolume, 0, 'f', 6);
+    result += QString("NegVolume      = %1 mm³\n").arg(s.negativeVolume, 0, 'f', 6);
+
+    return result;
 }
 
 // ── Surface Fitting ──────────────────────────────────────────────────────────
@@ -468,6 +500,13 @@ ImageProcessor::SphereFit ImageProcessor::fitSphere(const ViffImage& img, const 
         return result;  // Need at least 4 points for a sphere
     }
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Gauss-Newton sphere fitting (following FitPlaneCubicSphere_.java)
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Minimize sum of (r_i - radius)² where r_i = distance from point i to center
+    // Parameters: centroid (h, k, l) and radius
+    // ═══════════════════════════════════════════════════════════════════════════
+
     // Initial estimate: centroid and average distance
     double xSum = 0, ySum = 0, zSum = 0;
     for (size_t i = 0; i < n; ++i) {
@@ -479,7 +518,7 @@ ImageProcessor::SphereFit ImageProcessor::fitSphere(const ViffImage& img, const 
     double k = ySum / n;
     double l = zSum / n;
 
-    // Initial radius estimate
+    // Initial radius estimate: average distance from centroid
     double radius = 0;
     for (size_t i = 0; i < n; ++i) {
         const double dx = xPts[i] - h;
@@ -489,22 +528,23 @@ ImageProcessor::SphereFit ImageProcessor::fitSphere(const ViffImage& img, const 
     }
     radius /= n;
 
-    // Gauss-Newton iteration
-    const int maxIter = 100;
-    const double tol = 1e-10;
-    double gOld = 1.0, gNew = 100.0;
-    std::vector<double> r_i(n);
-
+    // Gauss-Newton iteration (following Java code structure)
+    double g_new = 100.0;
+    double g_old = 1.0;
     int iter = 0;
-    while (std::abs(gNew - gOld) > tol && iter < maxIter) {
+    const int maxIter = 500;  // Safety limit
+    const double tol = 1e-8;   // Same as Java code
+
+    while (std::abs(g_new - g_old) > tol && iter < maxIter) {
         ++iter;
-        gOld = gNew;
+        g_old = g_new;
 
         // Build Jacobian J (n x 4) and residual d (n x 1)
-        // Residual: d_i = r_i - radius, where r_i = distance from point i to center
-        // Jacobian: J_i = [-(x_i-h)/r_i, -(y_i-k)/r_i, -(z_i-l)/r_i, -1]
+        // d_i = r_i - radius
+        // J_i = [-(x_i-h)/r_i, -(y_i-k)/r_i, -(z_i-l)/r_i, -1]
+        //
+        // Normal equations: (J^T * J) * delta = J^T * (-d)
 
-        // Using normal equations: (J^T * J) * delta = J^T * (-d)
         double JtJ[4][4] = {{0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}};
         double Jtd[4] = {0, 0, 0, 0};
 
@@ -512,14 +552,14 @@ ImageProcessor::SphereFit ImageProcessor::fitSphere(const ViffImage& img, const 
             const double dx = xPts[i] - h;
             const double dy = yPts[i] - k;
             const double dz = zPts[i] - l;
-            r_i[i] = std::sqrt(dx * dx + dy * dy + dz * dz);
+            const double r_i = std::sqrt(dx * dx + dy * dy + dz * dz);
 
-            if (r_i[i] < 1e-12) continue;  // Skip degenerate case
+            if (r_i < 1e-12) continue;  // Skip degenerate case
 
-            const double d_i = r_i[i] - radius;
-            const double j0 = -dx / r_i[i];
-            const double j1 = -dy / r_i[i];
-            const double j2 = -dz / r_i[i];
+            const double d_i = r_i - radius;
+            const double j0 = -dx / r_i;
+            const double j1 = -dy / r_i;
+            const double j2 = -dz / r_i;
             const double j3 = -1.0;
 
             // Build J^T * J
@@ -528,14 +568,16 @@ ImageProcessor::SphereFit ImageProcessor::fitSphere(const ViffImage& img, const 
             JtJ[2][0] += j2 * j0;  JtJ[2][1] += j2 * j1;  JtJ[2][2] += j2 * j2;  JtJ[2][3] += j2 * j3;
             JtJ[3][0] += j3 * j0;  JtJ[3][1] += j3 * j1;  JtJ[3][2] += j3 * j2;  JtJ[3][3] += j3 * j3;
 
-            // Build J^T * (-d)
-            Jtd[0] += j0 * d_i;
-            Jtd[1] += j1 * d_i;
-            Jtd[2] += j2 * d_i;
-            Jtd[3] += j3 * d_i;
+            // Build J^T * (-d) where d = r_i - radius
+            // Java code negates d first, so we use -d_i = radius - r_i
+            Jtd[0] -= j0 * d_i;
+            Jtd[1] -= j1 * d_i;
+            Jtd[2] -= j2 * d_i;
+            Jtd[3] -= j3 * d_i;
         }
 
-        // Solve 4x4 system using Gaussian elimination with partial pivoting
+        // Solve 4x4 system: JtJ * delta = Jtd
+        // Using Gaussian elimination with partial pivoting
         double aug[4][5];
         for (int i = 0; i < 4; ++i) {
             for (int j = 0; j < 4; ++j)
@@ -544,25 +586,28 @@ ImageProcessor::SphereFit ImageProcessor::fitSphere(const ViffImage& img, const 
         }
 
         // Forward elimination with pivoting
-        for (int col = 0; col < 4; ++col) {
-            // Find pivot
+        bool singular = false;
+        for (int col = 0; col < 4 && !singular; ++col) {
             int maxRow = col;
             for (int row = col + 1; row < 4; ++row)
                 if (std::abs(aug[row][col]) > std::abs(aug[maxRow][col]))
                     maxRow = row;
-            // Swap rows
-            for (int j = 0; j < 5; ++j)
+            for (int j = 0; j <= 4; ++j)
                 std::swap(aug[col][j], aug[maxRow][j]);
 
-            if (std::abs(aug[col][col]) < 1e-15) continue;  // Singular
+            if (std::abs(aug[col][col]) < 1e-15) {
+                singular = true;
+                break;
+            }
 
-            // Eliminate below
             for (int row = col + 1; row < 4; ++row) {
                 const double f = aug[row][col] / aug[col][col];
-                for (int j = col; j < 5; ++j)
+                for (int j = col; j <= 4; ++j)
                     aug[row][j] -= f * aug[col][j];
             }
         }
+
+        if (singular) break;
 
         // Back substitution
         double delta[4] = {0, 0, 0, 0};
@@ -580,10 +625,11 @@ ImageProcessor::SphereFit ImageProcessor::fitSphere(const ViffImage& img, const 
         l += delta[2];
         radius += delta[3];
 
-        // Compute gradient norm for convergence check
-        gNew = 0;
+        // Compute gradient norm for convergence (following Java: sum of J^T * (r - radius))
+        // We negated Jtd above, so use negative to get original gradient
+        g_new = 0;
         for (int i = 0; i < 4; ++i)
-            gNew += std::abs(Jtd[i]);
+            g_new -= Jtd[i];  // Jtd was negated, so -Jtd gives original J^T*(r-radius)
     }
 
     result.h = h;
@@ -605,9 +651,10 @@ ImageProcessor::SphereFit ImageProcessor::fitSphere(const ViffImage& img, const 
     result.rmsError = std::sqrt(sumSqErr / n);
 
     // Auto-detect orientation: check if center z is above or below average z
-    // If l > zMean, sphere is convex (looking at it from above)
+    // If l < zMean, surface points are above center → convex dome (use z = l + sqrt)
+    // If l > zMean, surface points are below center → concave cavity (use z = l - sqrt)
     const double zMean = zSum / n;
-    result.convex = (l > zMean);
+    result.convex = (l < zMean);
 
     result.valid = true;
     return result;
@@ -634,8 +681,8 @@ ViffImage ImageProcessor::subtractSphere(const ViffImage& img, const SphereFit& 
 
             // Check if point is within sphere's xy projection
             if (xyDistSq >= fit.radius * fit.radius) {
-                // Outside sphere projection - just use original value
-                // (could also set to 0 or NaN depending on desired behavior)
+                // Outside sphere projection - set to zero (no sphere surface here)
+                out.data[idx] = 0.0f;
                 continue;
             }
 
@@ -643,7 +690,8 @@ ViffImage ImageProcessor::subtractSphere(const ViffImage& img, const SphereFit& 
             // Use + for convex (sphere above), - for concave (sphere below)
             const double zSphere = fit.l + (fit.convex ? 1.0 : -1.0) *
                                    std::sqrt(fit.radius * fit.radius - xyDistSq);
-            out.data[idx] = img.data[idx] - static_cast<float>(zSphere);
+            // Subtract data from sphere: positive = material missing (wear)
+            out.data[idx] = static_cast<float>(zSphere) - img.data[idx];
         }
     }
 

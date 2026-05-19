@@ -58,6 +58,12 @@ public:
         float    q95      = 0;
         float    q98      = 0;
         uint32_t validCount = 0;
+        // Volume calculations (useful for difference/subtracted images)
+        double   positiveVolume = 0;  // Volume above zero (mm³)
+        double   negativeVolume = 0;  // Volume below zero (mm³, stored as positive)
+        double   pixelArea = 0;       // Area of one pixel (mm²)
+        uint32_t positiveCount = 0;   // Number of pixels with z > 0
+        uint32_t negativeCount = 0;   // Number of pixels with z < 0
     };
     static Stats computeStats(const ViffImage& img, const RoiMask* roi);
 

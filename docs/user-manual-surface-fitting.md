@@ -54,7 +54,12 @@ After subtraction:
 - The flat reference surface will be approximately at z = 0
 - Depressions (wear) will show as negative values
 - Protrusions will show as positive values
-- Use **Process → Statistics...** on the result to measure the wear depth
+- Use **Process → Statistics...** on the result to measure the wear depth and **wear volume**
+
+**Volume measurement:**
+The Statistics dialog now includes volume calculations:
+- **NegVolume** = total wear volume (material loss below the fitted plane)
+- **PosVolume** = volume above the fitted plane (should be small for a good fit)
 
 ### 3.4 Output Parameters
 
@@ -105,9 +110,14 @@ This is determined by comparing the fitted center Z coordinate to the average Z 
 
 After subtraction:
 - The spherical reference surface will be approximately at z = 0
-- The wear facet will show as negative values (material removed)
+- The wear facet will show as positive values (material that should be there but is missing)
+- Areas outside the sphere's XY projection are set to zero
 - Use **Process → Statistics...** on the result to measure wear characteristics
-- For volume estimation, integrate the negative Z values over the wear region
+
+**Volume measurement:**
+The Statistics dialog now includes volume calculations:
+- **PosVolume** = wear facet volume (material missing from the ideal sphere)
+- **NegVolume** = volume below the sphere (should be small for a good fit)
 
 ### 4.5 Output Parameters
 
@@ -215,3 +225,21 @@ Orientation    = Convex (above)
 Iterations     = 12
 RMS Error      = 0.008765 mm
 ```
+
+---
+
+## 9. Synthetic Test Data
+
+For testing the surface fitting functions, Match3D includes a synthetic data generator that creates VIFF files with known geometric properties.
+
+**Generate a flat sample with spherical depression:**
+```bash
+./build/src/generate_wear_samples depression test_depression.xv --sphere 0.2
+```
+
+**Generate an antagonist with wear facet (truncated dome):**
+```bash
+./build/src/generate_wear_samples dome test_dome.xv --sphere 0.2 --truncate 0.1
+```
+
+See `docs/synthetic-test-data.md` for complete documentation of all generator options and parameters.

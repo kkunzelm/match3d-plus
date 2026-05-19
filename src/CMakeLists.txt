@@ -64,3 +64,7 @@ target_link_libraries(viff_test PRIVATE viff_io)
 # ── Synthetic test data generator ─────────────────────────────────────────────
 add_executable(synthetic_test_data tools/SyntheticTestData.cpp)
 target_link_libraries(synthetic_test_data PRIVATE viff_io)
+
+# ── Wear sample generator (plane+depression, plane+dome) ─────────────────────
+add_executable(generate_wear_samples tools/GenerateWearSamples.cpp)
+target_link_libraries(generate_wear_samples PRIVATE viff_io)

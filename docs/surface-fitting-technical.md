@@ -131,6 +131,8 @@ Where rᵢ = √((xᵢ-h)² + (yᵢ-k)² + (zᵢ-l)²) is the distance from poin
 
 This is a nonlinear optimization problem solved using the **Gauss-Newton method**.
 
+The implementation follows the algorithm from FitPlaneCubicSphere_.java (Kunzelmann, 2012).
+
 ### 4.3 Gauss-Newton Iteration
 
 **Residual:**
@@ -177,12 +179,12 @@ r₀ = (Σ√((xᵢ-h₀)² + (yᵢ-k₀)² + (zᵢ-l₀)²)) / n
 
 Iteration continues until:
 ```
-|g_new - g_old| < 10⁻¹⁰
+|g_new - g_old| < 10⁻⁸
 ```
 
-Where g = Σ|Jᵀd| is the gradient norm.
+Where g = Σ(Jᵀd) is the sum of gradient components (following the Java reference implementation).
 
-Maximum iterations: 100
+Maximum iterations: 500 (safety limit)
 
 ### 4.6 Linear System Solution
 
@@ -229,12 +231,12 @@ For each pixel (row, col) with valid depth z:
    ```
    Use + for convex (sphere above), - for concave (sphere below)
 
-3. Subtract:
+3. Subtract sphere from data (positive = material missing):
    ```
-   z_result = z - z_sphere
+   z_result = z_sphere - z
    ```
 
-Points outside the sphere's XY projection are left unchanged.
+4. Points outside the sphere's XY projection are set to zero.
 
 ### 4.10 Requirements
 

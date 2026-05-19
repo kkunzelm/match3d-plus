@@ -164,17 +164,41 @@ Min             = <value>
 Max             = <value>
 Mean            = <value>
 StdDev          = <value>
-2%:             = <value>
-5%:             = <value>
-10%:            = <value>
-50% (median):   = <value>
-90%:            = <value>
-95%:            = <value>
-98%:            = <value>
+Q02             = <value>
+Q05             = <value>
+Q10             = <value>
+Q50             = <value>   (median)
+Q90             = <value>
+Q95             = <value>
+Q98             = <value>
+# Volume (mm³) - for difference/subtracted images
+PixelArea       = <value> mm²
+PosPixels       = <count>
+NegPixels       = <count>
+PosVolume       = <value> mm³
+NegVolume       = <value> mm³
 ```
 
 **Why these quantiles?**
 Laser scanner data often contains outliers at the extremes. The 2nd and 98th percentiles give robust bounds that exclude 2% of outliers on each side. The 5th/95th and 10th/90th percentiles offer progressively more conservative bounds. The median (50th percentile) is a robust measure of the central depth.
+
+### 4.2 Volume Calculations
+
+The volume fields are particularly useful for **difference images** and **surface-subtracted images** (after Fit Plane or Fit Sphere subtraction):
+
+| Field | Description |
+|-------|-------------|
+| PixelArea | Area of one pixel: xPixelSize × yPixelSize (mm²) |
+| PosPixels | Number of pixels with z > 0 |
+| NegPixels | Number of pixels with z < 0 |
+| PosVolume | Total volume above zero: Σ(z × pixelArea) for z > 0 (mm³) |
+| NegVolume | Total volume below zero: Σ(\|z\| × pixelArea) for z < 0 (mm³) |
+
+**Interpretation for wear analysis:**
+- After subtracting a fitted plane or sphere, the surface should be approximately at z = 0
+- **NegVolume** represents material loss (wear volume) - the volume of the depression below the reference surface
+- **PosVolume** represents material above the reference (protrusions, or noise)
+- For a well-fitted reference, PosVolume should be small compared to NegVolume
 
 ### 4.2 Saving Statistics
 

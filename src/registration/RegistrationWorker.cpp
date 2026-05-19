@@ -709,28 +709,52 @@ void RegistrationWorker::runCCLibICP() {
     }
 
     // Convert CCCoreLib transformation back to Transformation3D
-    // The CCCoreLib transformation includes the initial transform already applied
-    // finalTrans.R is the ICP refinement rotation, finalTrans.T is the translation
-
-    // Combine: Total = finalTrans * initialTrans
-    // R_total = R_icp * R_initial
-    // T_total = R_icp * T_initial + T_icp
     //
-    // But since we pre-applied initialTrans to dataCloud, finalTrans is the total.
+    // We pre-applied initialTrans (T0) to dataCloud before running ICP.
+    // CCCoreLib ICP returns T_icp that transforms the pre-transformed data to model.
+    //
+    // So: model = T_icp * (T0 * data_original) = (T_icp * T0) * data_original
+    //
+    // The total transformation is:
+    //   R_total = R_icp * R0
+    //   T_total = R_icp * T0_vec + T_icp
+    //
+    // We need to compose the transformations properly.
 
-    // Extract Euler angles from the rotation matrix (ZYX convention)
+    const CCCoreLib::SquareMatrix& R_icp = finalTrans.R;
+
+    // Compute R_total = R_icp * R0
+    CCCoreLib::SquareMatrix R_total(3);
+    for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j < 3; ++j) {
+            float sum = 0;
+            for (int k = 0; k < 3; ++k) {
+                sum += R_icp.m_values[i][k] * R0.m_values[k][j];
+            }
+            R_total.m_values[i][j] = sum;
+        }
+    }
+
+    // Compute T_total = R_icp * T0_vec + T_icp
+    CCVector3 T_total;
+    T_total.x = R_icp.m_values[0][0] * T0vec.x + R_icp.m_values[0][1] * T0vec.y +
+                R_icp.m_values[0][2] * T0vec.z + finalTrans.T.x;
+    T_total.y = R_icp.m_values[1][0] * T0vec.x + R_icp.m_values[1][1] * T0vec.y +
+                R_icp.m_values[1][2] * T0vec.z + finalTrans.T.y;
+    T_total.z = R_icp.m_values[2][0] * T0vec.x + R_icp.m_values[2][1] * T0vec.y +
+                R_icp.m_values[2][2] * T0vec.z + finalTrans.T.z;
+
+    // Extract Euler angles from R_total (ZYX convention)
     // R = Rz(alpha) * Ry(beta) * Rx(gamma)
-    const CCCoreLib::SquareMatrix& R = finalTrans.R;
-
     double alpha, beta, gamma;
-    beta = std::asin(-R.m_values[2][0]);
+    beta = std::asin(-R_total.m_values[2][0]);
 
     if (std::abs(std::cos(beta)) > 1e-6) {
-        alpha = std::atan2(R.m_values[1][0], R.m_values[0][0]);
-        gamma = std::atan2(R.m_values[2][1], R.m_values[2][2]);
+        alpha = std::atan2(R_total.m_values[1][0], R_total.m_values[0][0]);
+        gamma = std::atan2(R_total.m_values[2][1], R_total.m_values[2][2]);
     } else {
         // Gimbal lock
-        alpha = std::atan2(-R.m_values[0][1], R.m_values[1][1]);
+        alpha = std::atan2(-R_total.m_values[0][1], R_total.m_values[1][1]);
         gamma = 0;
     }
 
@@ -738,9 +762,9 @@ void RegistrationWorker::runCCLibICP() {
     result3D.alpha = alpha * 180.0 / M_PI;
     result3D.beta  = beta  * 180.0 / M_PI;
     result3D.gamma = gamma * 180.0 / M_PI;
-    result3D.tx = finalTrans.T.x;
-    result3D.ty = finalTrans.T.y;
-    result3D.tz = finalTrans.T.z;
+    result3D.tx = T_total.x;
+    result3D.ty = T_total.y;
+    result3D.tz = T_total.z;
 
     emit registrationFinished(true, result3D, finalRMS, finalPointCount, QString());
 }
