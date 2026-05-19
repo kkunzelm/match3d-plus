@@ -60,3 +60,6 @@ data/3d-data/*.java
 *.out
 *.toc
 *.synctex.gz
+
+# Claude Code history
+CLAUDE_HISTORY.md
