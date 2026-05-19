@@ -45,6 +45,7 @@ For specimens with known geometry:
 - **C++20 compatible compiler** (GCC 11+, Clang 13+, MSVC 2019+)
 - **CCCoreLib** (included as git submodule) - Point cloud library from CloudCompare
 - **happly** (included) - PLY file I/O header-only library
+- **nanoflann** (included) - KD-tree header-only library for nearest neighbor search
 
 ## Building
 
@@ -127,7 +128,17 @@ Author of this Qt6/C++20 re-implementation.
 
 This project is licensed under the [GNU General Public License v2](https://www.gnu.org/licenses/old-licenses/gpl-2.0.html) or later. See the [LICENSE](LICENSE) file for details.
 
-This project uses CCCoreLib from CloudCompare, which is also licensed under GPL v2+. See `extern/CCCoreLib/LICENSE.txt` for details.
+### Third-Party Licenses
+
+This project includes the following third-party libraries:
+
+| Library | License | Location |
+|---------|---------|----------|
+| CCCoreLib | LGPL v2 / MIT | `extern/CCCoreLib/` |
+| happly | MIT | `extern/happly/` |
+| nanoflann | BSD | `extern/nanoflann/` |
+
+All included licenses are compatible with GPL v2. See the LICENSE files in each directory for details.
 
 You are welcome to download, modify, and redistribute this software at no cost under the terms of the GPL.
 
@@ -153,5 +164,6 @@ If your organization requires commercial backing, custom training, or developmen
 ## Acknowledgments
 
 - **Wolfram Gloger** - Original Match3D 2.5 implementation
-- **CloudCompare team** - CCCoreLib point cloud library
-- **happly** - PLY file I/O library
+- **CloudCompare team** - CCCoreLib point cloud library (LGPL v2 / MIT)
+- **Nick Sharp** - happly PLY file I/O library (MIT)
+- **Jose Luis Blanco** - nanoflann KD-tree library (BSD)
