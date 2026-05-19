@@ -64,4 +64,44 @@ public:
     // Format stats as a tagged key=value text block suitable for display and saving.
     // Each line: "Key = Value\n". Comment lines start with '#'.
     static QString formatStats(const Stats& s, const QString& imageLabel);
+
+    // ── Surface Fitting ──────────────────────────────────────────────────────
+    // Plane fit: z = A*x + B*y + C (x, y in world coordinates)
+    struct PlaneFit {
+        double A = 0;         // Coefficient for x
+        double B = 0;         // Coefficient for y
+        double C = 0;         // Constant term
+        double rmsError = 0;  // RMS residual error
+        uint32_t pointCount = 0;
+        bool valid = false;
+    };
+    // Fit a plane to the selected ROI pixels using least squares.
+    static PlaneFit fitPlane(const ViffImage& img, const RoiMask* roi);
+
+    // Generate a new image with the fitted plane subtracted from the original.
+    static ViffImage subtractPlane(const ViffImage& img, const PlaneFit& fit);
+
+    // Format plane fit results for display.
+    static QString formatPlaneFit(const PlaneFit& fit, const QString& imageLabel);
+
+    // Sphere fit: (x-h)^2 + (y-k)^2 + (z-l)^2 = r^2
+    struct SphereFit {
+        double h = 0;         // Center x coordinate
+        double k = 0;         // Center y coordinate
+        double l = 0;         // Center z coordinate
+        double radius = 0;    // Sphere radius
+        double rmsError = 0;  // RMS residual error
+        uint32_t pointCount = 0;
+        int iterations = 0;   // Number of iterations for convergence
+        bool convex = true;   // true=sphere above (z+), false=below (z-)
+        bool valid = false;
+    };
+    // Fit a sphere to the selected ROI pixels using iterative Gauss-Newton.
+    static SphereFit fitSphere(const ViffImage& img, const RoiMask* roi);
+
+    // Generate a new image with the fitted sphere subtracted from the original.
+    static ViffImage subtractSphere(const ViffImage& img, const SphereFit& fit);
+
+    // Format sphere fit results for display.
+    static QString formatSphereFit(const SphereFit& fit, const QString& imageLabel);
 };

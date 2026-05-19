@@ -233,6 +233,108 @@ void ImageWindow::showHistogramDialog() {
     dlg.exec();
 }
 
+void ImageWindow::showFitPlaneDialog() {
+    const auto fit = ImageProcessor::fitPlane(image_, &roiMask_);
+    const QString label = QFileInfo(path_).fileName();
+    const QString text = ImageProcessor::formatPlaneFit(fit, label);
+
+    QDialog dlg(this);
+    dlg.setWindowTitle("Fit Plane — " + label);
+    auto* layout = new QVBoxLayout(&dlg);
+
+    auto* edit = new QPlainTextEdit(text, &dlg);
+    edit->setReadOnly(true);
+    edit->setFont(QFont("Courier", 10));
+    edit->setMinimumSize(400, 280);
+    layout->addWidget(edit);
+
+    auto* buttons = new QDialogButtonBox(&dlg);
+    auto* subtractBtn = buttons->addButton("Subtract Plane", QDialogButtonBox::ActionRole);
+    auto* saveBtn = buttons->addButton("Save...", QDialogButtonBox::ActionRole);
+    buttons->addButton(QDialogButtonBox::Close);
+    layout->addWidget(buttons);
+
+    subtractBtn->setEnabled(fit.valid);
+
+    connect(subtractBtn, &QPushButton::clicked, &dlg, [this, &dlg, fit, label]{
+        ViffImage result = ImageProcessor::subtractPlane(image_, fit);
+        const QString title = label + " - plane subtracted";
+        if (mainWindow_) {
+            mainWindow_->openImageWindow(std::move(result), title, nullptr);
+        }
+        dlg.accept();
+    });
+
+    connect(saveBtn, &QPushButton::clicked, &dlg, [&dlg, &text, label]{
+        QString path = QFileDialog::getSaveFileName(
+            &dlg, "Save plane fit", label + "_planefit.txt",
+            "Text files (*.txt);;All files (*)");
+        if (path.isEmpty()) return;
+        if (!path.contains('.'))
+            path += ".txt";
+        QFile f(path);
+        if (f.open(QIODevice::WriteOnly | QIODevice::Text))
+            QTextStream(&f) << text;
+        else
+            QMessageBox::warning(&dlg, "Save", "Cannot write file:\n" + path);
+    });
+
+    connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::accept);
+
+    dlg.exec();
+}
+
+void ImageWindow::showFitSphereDialog() {
+    const auto fit = ImageProcessor::fitSphere(image_, &roiMask_);
+    const QString label = QFileInfo(path_).fileName();
+    const QString text = ImageProcessor::formatSphereFit(fit, label);
+
+    QDialog dlg(this);
+    dlg.setWindowTitle("Fit Sphere — " + label);
+    auto* layout = new QVBoxLayout(&dlg);
+
+    auto* edit = new QPlainTextEdit(text, &dlg);
+    edit->setReadOnly(true);
+    edit->setFont(QFont("Courier", 10));
+    edit->setMinimumSize(400, 320);
+    layout->addWidget(edit);
+
+    auto* buttons = new QDialogButtonBox(&dlg);
+    auto* subtractBtn = buttons->addButton("Subtract Sphere", QDialogButtonBox::ActionRole);
+    auto* saveBtn = buttons->addButton("Save...", QDialogButtonBox::ActionRole);
+    buttons->addButton(QDialogButtonBox::Close);
+    layout->addWidget(buttons);
+
+    subtractBtn->setEnabled(fit.valid);
+
+    connect(subtractBtn, &QPushButton::clicked, &dlg, [this, &dlg, fit, label]{
+        ViffImage result = ImageProcessor::subtractSphere(image_, fit);
+        const QString title = label + " - sphere subtracted";
+        if (mainWindow_) {
+            mainWindow_->openImageWindow(std::move(result), title, nullptr);
+        }
+        dlg.accept();
+    });
+
+    connect(saveBtn, &QPushButton::clicked, &dlg, [&dlg, &text, label]{
+        QString path = QFileDialog::getSaveFileName(
+            &dlg, "Save sphere fit", label + "_spherefit.txt",
+            "Text files (*.txt);;All files (*)");
+        if (path.isEmpty()) return;
+        if (!path.contains('.'))
+            path += ".txt";
+        QFile f(path);
+        if (f.open(QIODevice::WriteOnly | QIODevice::Text))
+            QTextStream(&f) << text;
+        else
+            QMessageBox::warning(&dlg, "Save", "Cannot write file:\n" + path);
+    });
+
+    connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::accept);
+
+    dlg.exec();
+}
+
 // ── Slot: polygon completed ───────────────────────────────────────────────────
 
 void ImageWindow::onPolygonCompleted(QPolygonF poly, bool select) {
@@ -493,6 +595,13 @@ void ImageWindow::createMenus() {
             }
         });
     });
+
+    // Fit Surface submenu
+    auto* fitMenu = procMenu->addMenu("Fit Surface");
+    connect(fitMenu->addAction("Fit Plane..."), &QAction::triggered, this,
+            [this]{ showFitPlaneDialog(); });
+    connect(fitMenu->addAction("Fit Sphere..."), &QAction::triggered, this,
+            [this]{ showFitSphereDialog(); });
 
     procMenu->addSeparator();
     connect(procMenu->addAction("Statistics..."), &QAction::triggered, this,

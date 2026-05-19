@@ -64,6 +64,8 @@ private:
     void showScaleDialog();
     void showStatisticsDialog();
     void showHistogramDialog();
+    void showFitPlaneDialog();
+    void showFitSphereDialog();
 
     int index_;
     QString path_;

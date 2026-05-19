@@ -98,7 +98,7 @@ This file documents the development history of Match3D v2, a Qt6/C++20 re-implem
 - **Save dialogs**: Auto-append `.txt` extension when missing
 - **New tool**: `synthetic_test_data` for generating test surfaces with known transformations
 
-### (current) - Add CCCoreLib ICP button
+### 5191b14 - Add CCCoreLib ICP button
 - **New "ICP" button** in Matching Control Panel (next to Align and Refine)
   - Uses `ICPRegistrationTools::Register` from CCCoreLib
   - Full 6-DOF registration (all rotations + translations)
@@ -108,6 +108,28 @@ This file documents the development history of Match3D v2, a Qt6/C++20 re-implem
   - `MAX_ITER_CONVERGENCE` mode
   - `filterOutFarthestPoints = true` (helps with partial overlap)
   - `adjustScale = false` (no scale changes for dental scans)
+
+### (current) - Add Surface Fitting (Fit Plane, Fit Sphere)
+- **New Process → Fit Surface submenu** with two fitting operations:
+  - **Fit Plane**: Least-squares plane fitting (z = Ax + By + C)
+  - **Fit Sphere**: Iterative Gauss-Newton sphere fitting
+- **Plane fitting algorithm**:
+  - Builds 3×3 normal equation system from selected ROI pixels
+  - Solves using Cramer's rule
+  - Reports coefficients, slope angles, and RMS error
+- **Sphere fitting algorithm**:
+  - Gauss-Newton iteration with Jacobian-based updates
+  - Initial estimate from centroid and average distance
+  - Auto-detects convex (above) vs concave (below) orientation
+  - Reports center, radius, iterations, and RMS error
+- **Subtract operations**: Create new window with fitted surface subtracted
+  - Useful for isolating wear depressions on flat samples
+  - Useful for measuring wear facets on spherical antagonists
+- **Result dialogs**: Show fit statistics with Save and Subtract buttons
+- **Documentation**:
+  - `docs/user-manual-surface-fitting.md` - User guide with workflows
+  - `docs/surface-fitting-technical.md` - Algorithm details and math
+- Based on original Java implementation (FitPlaneCubicSphere_.java)
 
 ---
 
@@ -120,6 +142,7 @@ This file documents the development history of Match3D v2, a Qt6/C++20 re-implem
 | `src/MainWindow.cpp` | Application main window, file management |
 | `src/ImageWindow.cpp` | Individual image display window with ROI tools |
 | `src/DepthImageView.cpp` | Image rendering (color mapping, Graycast) |
+| `src/ImageProcessor.cpp` | Image processing: filters, statistics, surface fitting |
 | `src/registration/RegistrationWorker.cpp` | ICP algorithms (4-DOF, 6-DOF, CCCoreLib ICP) |
 | `src/registration/CoarseRegistration.cpp` | COM and landmark-based alignment |
 | `src/dialogs/MatchingControlPanel.cpp` | Registration UI controls |
@@ -135,6 +158,15 @@ This file documents the development history of Match3D v2, a Qt6/C++20 re-implem
 | Align | Custom 2.5D ICP | 4 | Z-rotation + translation (α, tx, ty, tz) |
 | Refine | Point-to-plane ICP | 6 | Full Euler + translation (α, β, γ, tx, ty, tz) |
 | ICP | CCCoreLib ICP | 6 | Standard Besl & McKay ICP with outlier filtering |
+
+### Surface Fitting Methods
+
+| Menu Item | Method | Parameters | Description |
+|-----------|--------|------------|-------------|
+| Fit Plane | Least-squares | A, B, C | z = Ax + By + C, solved via normal equations |
+| Fit Sphere | Gauss-Newton | h, k, l, r | (x-h)² + (y-k)² + (z-l)² = r², iterative |
+
+Both methods use only ROI-selected pixels. Subtract operations create a new image with the fitted surface removed, useful for isolating wear depressions or measuring wear facets.
 
 ### Transformation Model
 
