@@ -6,7 +6,7 @@ Version: 2026-05-19
 
 ## 1. Overview
 
-This document describes the algorithms used for plane and sphere fitting in match3d_v2. Both algorithms use least-squares optimization to find the best-fit geometric primitive to a set of 3D points derived from the selected ROI of a depth image.
+This document describes the algorithms used for plane and sphere fitting in Match3D+. Both algorithms use least-squares optimization to find the best-fit geometric primitive to a set of 3D points derived from the selected ROI of a depth image.
 
 **Source files:**
 - `src/ImageProcessor.h` — Data structures and function declarations
@@ -199,11 +199,11 @@ The 4×4 normal equations (JᵀJ)δ = Jᵀ(-d) are solved using **Gaussian elimi
 After convergence, the sphere orientation is determined by comparing the center z-coordinate to the average z of the data points:
 
 ```cpp
-convex = (l > z_mean)  // true if center is above data
+convex = (l < zMean)  // true if center is below data (dome surface)
 ```
 
-- **Convex (above):** Scanner looking down at a ball
-- **Concave (below):** Scanner looking into a cavity
+- **Convex (dome):** Surface points are above the sphere center (scanner looking at a ball from above)
+- **Concave (cavity):** Surface points are below the sphere center (scanner looking into a depression)
 
 ### 4.8 Quality Metrics
 
@@ -328,13 +328,13 @@ static QString formatSphereFit(const SphereFit& fit, const QString& imageLabel);
 
 - All intermediate calculations use `double` precision
 - Final results stored as `float` in ViffImage for compatibility
-- Convergence tolerance: 10⁻¹⁰ for sphere fitting
+- Convergence tolerance: 10⁻⁸ for sphere fitting (kSphereFitConvergence)
 
 ### 8.2 Robustness
 
-- Singular matrix detection (det < 10⁻¹⁵) for plane fitting
-- Maximum iteration limit (100) for sphere fitting
-- Skip degenerate cases (rᵢ < 10⁻¹²) in Jacobian computation
+- Singular matrix detection (det < 10⁻¹⁵) for plane fitting (kSingularMatrixTol)
+- Maximum iteration limit: 500 for sphere fitting (kSphereFitMaxIter)
+- Skip degenerate cases (rᵢ < 10⁻¹²) in Jacobian computation (kDegenerateDistTol)
 
 ### 8.3 Performance
 

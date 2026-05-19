@@ -1,3 +1,22 @@
+/*
+ * Match3D+ - Dental surface comparison software
+ * Copyright (C) 2026 Karl-Heinz Kunzelmann
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ */
+
 // Synthetic test data generator for registration testing
 // Creates non-symmetric surfaces with known transformations and noise
 
@@ -5,9 +24,14 @@
 #include "../io/ViffWriter.h"
 
 #include <cmath>
-#include <random>
 #include <iostream>
+#include <numbers>
+#include <random>
 #include <string>
+
+namespace {
+    constexpr double kDegToRad = std::numbers::pi / 180.0;
+}
 
 // Generate a highly non-symmetric surface
 // Combines: tilted plane + asymmetric gaussian bumps + a ridge
@@ -72,12 +96,12 @@ ViffImage applyTransformation(const ViffImage& model,
                                float tx, float ty, float tz,
                                std::mt19937& rng, float noiseStdDev) {
     // Create rotation matrix R = Rz(alpha) * Ry(beta) * Rx(gamma)
-    const double ca = std::cos(alpha_deg * M_PI / 180.0);
-    const double sa = std::sin(alpha_deg * M_PI / 180.0);
-    const double cb = std::cos(beta_deg * M_PI / 180.0);
-    const double sb = std::sin(beta_deg * M_PI / 180.0);
-    const double cg = std::cos(gamma_deg * M_PI / 180.0);
-    const double sg = std::sin(gamma_deg * M_PI / 180.0);
+    const double ca = std::cos(alpha_deg * kDegToRad);
+    const double sa = std::sin(alpha_deg * kDegToRad);
+    const double cb = std::cos(beta_deg * kDegToRad);
+    const double sb = std::sin(beta_deg * kDegToRad);
+    const double cg = std::cos(gamma_deg * kDegToRad);
+    const double sg = std::sin(gamma_deg * kDegToRad);
 
     double R[3][3];
     R[0][0] = ca * cb;

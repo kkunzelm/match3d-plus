@@ -6,7 +6,7 @@ Version: 2026-05-19
 
 ## Overview
 
-Match3D v2 includes command-line tools for generating synthetic 3D surface data. These tools create VIFF files with known geometric properties for testing registration algorithms and surface fitting functions.
+Match3D+ includes command-line tools for generating synthetic 3D surface data. These tools create VIFF files with known geometric properties for testing registration algorithms and surface fitting functions.
 
 **Tools:**
 - `synthetic_test_data` — Generates non-symmetric surfaces with known transformations for ICP testing
@@ -227,7 +227,7 @@ All generators output standard VIFF/XV files:
 - 32-bit float depth data (row-major)
 - Pixel sizes stored in header
 
-Files can be opened directly in Match3D v2 or processed with the VIFF I/O library.
+Files can be opened directly in Match3D+ or processed with the VIFF I/O library.
 
 ---
 

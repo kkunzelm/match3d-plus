@@ -11,7 +11,7 @@
 \usepackage{geometry}
 \geometry{margin=2.5cm}
 
-\title{Match3D v2: 2.5D Registration Algorithm\\[0.5em]\large Technical Documentation}
+\title{Match3D+: 2.5D Registration Algorithm\\[0.5em]\large Technical Documentation}
 \author{Match3D Development Team}
 \date{May 2026}
 
@@ -19,7 +19,7 @@
 \maketitle
 
 \begin{abstract}
-This document describes the registration algorithms implemented in Match3D v2 for aligning 2.5D depth images (heightmaps). Unlike standard 3D point cloud registration methods, our approach treats the problem as a 2D registration in the $(x,y)$ plane with separate handling of the $z$ (depth) axis. This design decision addresses the fundamental scale imbalance present in 2.5D data where depth values are orders of magnitude larger than lateral coordinates.
+This document describes the registration algorithms implemented in Match3D+ for aligning 2.5D depth images (heightmaps). Unlike standard 3D point cloud registration methods, our approach treats the problem as a 2D registration in the $(x,y)$ plane with separate handling of the $z$ (depth) axis. This design decision addresses the fundamental scale imbalance present in 2.5D data where depth values are orders of magnitude larger than lateral coordinates.
 \end{abstract}
 
 \tableofcontents

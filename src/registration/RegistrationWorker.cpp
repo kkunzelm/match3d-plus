@@ -1,3 +1,22 @@
+/*
+ * Match3D+ - Dental surface comparison software
+ * Copyright (C) 2026 Karl-Heinz Kunzelmann
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ */
+
 #include "RegistrationWorker.h"
 
 #include <CCGeom.h>
@@ -5,8 +24,23 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numbers>
 #include <random>
 #include <vector>
+
+// ── Numerical Constants ──────────────────────────────────────────────────────
+namespace {
+    constexpr double kPi = std::numbers::pi;
+    constexpr double kDegToRad = kPi / 180.0;
+    constexpr double kRadToDeg = 180.0 / kPi;
+
+    // Tolerances for ICP convergence
+    constexpr double kRmsConvergenceTol = 1e-6;    // RMS convergence threshold
+    constexpr double kGimbalLockTol = 1e-6;        // Threshold for gimbal lock detection
+    constexpr double kAngleConvergenceDeg = 0.001; // Angle convergence (degrees)
+    constexpr double kTransConvergenceMm = 0.001;  // Translation convergence (mm)
+    constexpr double kMaxSlopeAngleDeg = 89.0;     // Filter near-vertical surfaces
+}
 
 RegistrationWorker::RegistrationWorker(Config cfg, QObject* parent)
     : QObject(parent)
@@ -108,8 +142,8 @@ void RegistrationWorker::run4DOF() {
         std::vector<double> modelXs, modelYs, modelZs;
         std::vector<double> dataXs, dataYs, dataZs;
 
-        const double cosA = std::cos(currentTransform.alpha * M_PI / 180.0);
-        const double sinA = std::sin(currentTransform.alpha * M_PI / 180.0);
+        const double cosA = std::cos(currentTransform.alpha * kDegToRad);
+        const double sinA = std::sin(currentTransform.alpha * kDegToRad);
 
         for (uint32_t mr = 0; mr < modelImg.rows; ++mr) {
             for (uint32_t mc = 0; mc < modelImg.cols; ++mc) {
@@ -222,15 +256,15 @@ void RegistrationWorker::run4DOF() {
             : zDiffs[zDiffs.size()/2];
 
         // Compute translation update
-        const double newCosA = std::cos((currentTransform.alpha * M_PI / 180.0) + deltaTheta);
-        const double newSinA = std::sin((currentTransform.alpha * M_PI / 180.0) + deltaTheta);
+        const double newCosA = std::cos((currentTransform.alpha * kDegToRad) + deltaTheta);
+        const double newSinA = std::sin((currentTransform.alpha * kDegToRad) + deltaTheta);
         const double rotatedDataCx = dataCx * newCosA - dataCy * newSinA;
         const double rotatedDataCy = dataCx * newSinA + dataCy * newCosA;
         const double deltaTx = modelCx - rotatedDataCx - currentTransform.tx;
         const double deltaTy = modelCy - rotatedDataCy - currentTransform.ty;
 
         // Update transform
-        currentTransform.alpha += deltaTheta * 180.0 / M_PI;
+        currentTransform.alpha += deltaTheta * kRadToDeg;
         currentTransform.tx += deltaTx;
         currentTransform.ty += deltaTy;
         currentTransform.tz += deltaTz;
@@ -263,9 +297,10 @@ void RegistrationWorker::run4DOF() {
 // ═══════════════════════════════════════════════════════════════════════════════
 // 6-DOF Refine: Point-to-Plane ICP (Neugebauer algorithm)
 // ═══════════════════════════════════════════════════════════════════════════════
-// Reference: Peter Neugebauer, "Feinjustierung von Tiefenbildern zur
-// Vermessung von kleinen Verformungen", Diplomarbeit, IMMD 5,
-// Universität Erlangen-Nürnberg, 1991.
+// Reference: Peter Neugebauer, "Fine Adjustment of Depth Images for Measurement
+// of Small Deformations" (German: "Feinjustierung von Tiefenbildern zur Vermessung
+// von kleinen Verformungen"), Master's Thesis, IMMD 5, University of Erlangen-
+// Nuremberg, 1991.
 //
 // Key idea: Use point-to-plane distance instead of point-to-point.
 // This converges faster and handles surface micro-roughness better.
@@ -323,12 +358,12 @@ void RegistrationWorker::run6DOF() {
         emit progressUpdated(static_cast<float>(iter * 100.0 / maxIter));
 
         // Compute rotation matrix from current Euler angles (ZYX convention)
-        const double ca = std::cos(T.alpha * M_PI / 180.0);
-        const double sa = std::sin(T.alpha * M_PI / 180.0);
-        const double cb = std::cos(T.beta  * M_PI / 180.0);
-        const double sb = std::sin(T.beta  * M_PI / 180.0);
-        const double cg = std::cos(T.gamma * M_PI / 180.0);
-        const double sg = std::sin(T.gamma * M_PI / 180.0);
+        const double ca = std::cos(T.alpha * kDegToRad);
+        const double sa = std::sin(T.alpha * kDegToRad);
+        const double cb = std::cos(T.beta  * kDegToRad);
+        const double sb = std::sin(T.beta  * kDegToRad);
+        const double cg = std::cos(T.gamma * kDegToRad);
+        const double sg = std::sin(T.gamma * kDegToRad);
 
         // Rotation matrix R = Rz(alpha) * Ry(beta) * Rx(gamma)
         // This transforms data -> model
@@ -377,8 +412,8 @@ void RegistrationWorker::run6DOF() {
 
                 // Skip extremely steep slopes (near-vertical surfaces)
                 const double gradient = std::sqrt(dzdx*dzdx + dzdy*dzdy);
-                const double slopeAngle = std::atan(gradient) * 180.0 / M_PI;
-                if (slopeAngle > 89.0) {  // Only filter near-vertical (was 75°)
+                const double slopeAngle = std::atan(gradient) * kRadToDeg;
+                if (slopeAngle > kMaxSlopeAngleDeg) {  // Only filter near-vertical surfaces
                     ++dbgSlope; continue;
                 }
 
@@ -469,7 +504,7 @@ void RegistrationWorker::run6DOF() {
 
                 // Jacobian row: [d/d_gamma, d/d_beta, d/d_alpha, d/d_tx, d/d_ty, d/d_tz]
                 // Note: angles are in degrees, so we scale by π/180
-                const double deg2rad = M_PI / 180.0;
+                const double deg2rad = kDegToRad;
                 double row[6];
                 row[0] = cpx / nlen * deg2rad;  // ∂r/∂gamma (rotation around x)
                 row[1] = cpy / nlen * deg2rad;  // ∂r/∂beta (rotation around y)
@@ -506,7 +541,7 @@ void RegistrationWorker::run6DOF() {
         const double rms = std::sqrt(sumSqResidual / count);
 
         // Check for convergence
-        if (rms < 1e-6 || (iter > 0 && std::abs(rms - prevRMS) < 1e-6 * rms)) {
+        if (rms < kRmsConvergenceTol || (iter > 0 && std::abs(rms - prevRMS) < kRmsConvergenceTol * rms)) {
             emit registrationFinished(true, T, rms, static_cast<unsigned>(count), QString());
             return;
         }
@@ -587,7 +622,7 @@ void RegistrationWorker::run6DOF() {
         T.tz    += delta[5];
 
         // Check convergence based on update magnitude
-        if (angleDelta < 0.001 && transDelta < 0.001 && iter > 0) {
+        if (angleDelta < kAngleConvergenceDeg && transDelta < kTransConvergenceMm && iter > 0) {
             emit registrationFinished(true, T, rms, static_cast<unsigned>(count), QString());
             return;
         }
@@ -628,12 +663,12 @@ void RegistrationWorker::runCCLibICP() {
 
     // Apply initial transform to data cloud
     const Transformation3D& T0 = cfg_.initialTransform;
-    const double ca = std::cos(T0.alpha * M_PI / 180.0);
-    const double sa = std::sin(T0.alpha * M_PI / 180.0);
-    const double cb = std::cos(T0.beta  * M_PI / 180.0);
-    const double sb = std::sin(T0.beta  * M_PI / 180.0);
-    const double cg = std::cos(T0.gamma * M_PI / 180.0);
-    const double sg = std::sin(T0.gamma * M_PI / 180.0);
+    const double ca = std::cos(T0.alpha * kDegToRad);
+    const double sa = std::sin(T0.alpha * kDegToRad);
+    const double cb = std::cos(T0.beta  * kDegToRad);
+    const double sb = std::sin(T0.beta  * kDegToRad);
+    const double cg = std::cos(T0.gamma * kDegToRad);
+    const double sg = std::sin(T0.gamma * kDegToRad);
 
     // Rotation matrix R = Rz(alpha) * Ry(beta) * Rx(gamma)
     CCCoreLib::SquareMatrix R0(3);
@@ -749,19 +784,19 @@ void RegistrationWorker::runCCLibICP() {
     double alpha, beta, gamma;
     beta = std::asin(-R_total.m_values[2][0]);
 
-    if (std::abs(std::cos(beta)) > 1e-6) {
+    if (std::abs(std::cos(beta)) > kGimbalLockTol) {
         alpha = std::atan2(R_total.m_values[1][0], R_total.m_values[0][0]);
         gamma = std::atan2(R_total.m_values[2][1], R_total.m_values[2][2]);
     } else {
-        // Gimbal lock
+        // Gimbal lock: beta ≈ ±90°, alpha absorbs rotation
         alpha = std::atan2(-R_total.m_values[0][1], R_total.m_values[1][1]);
         gamma = 0;
     }
 
     Transformation3D result3D;
-    result3D.alpha = alpha * 180.0 / M_PI;
-    result3D.beta  = beta  * 180.0 / M_PI;
-    result3D.gamma = gamma * 180.0 / M_PI;
+    result3D.alpha = alpha * kRadToDeg;
+    result3D.beta  = beta  * kRadToDeg;
+    result3D.gamma = gamma * kRadToDeg;
     result3D.tx = T_total.x;
     result3D.ty = T_total.y;
     result3D.tz = T_total.z;

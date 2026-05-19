@@ -1,3 +1,22 @@
+/*
+ * Match3D+ - Dental surface comparison software
+ * Copyright (C) 2026 Karl-Heinz Kunzelmann
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ */
+
 #include "ImageProcessor.h"
 #include "RoiMask.h"
 #include "io/ViffReader.h"
@@ -8,8 +27,22 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <numbers>
 #include <random>
 #include <vector>
+
+// ── Numerical Constants ──────────────────────────────────────────────────────
+namespace {
+    constexpr double kPi = std::numbers::pi;
+    constexpr double kDegToRad = kPi / 180.0;
+    constexpr double kRadToDeg = 180.0 / kPi;
+
+    // Tolerances for numerical algorithms
+    constexpr double kSingularMatrixTol = 1e-15;   // Determinant threshold for singular matrix
+    constexpr double kDegenerateDistTol = 1e-12;   // Skip points closer than this
+    constexpr double kSphereFitConvergence = 1e-8; // Gauss-Newton convergence tolerance
+    constexpr int    kSphereFitMaxIter = 500;      // Maximum Gauss-Newton iterations
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -370,7 +403,7 @@ ImageProcessor::PlaneFit ImageProcessor::fitPlane(const ViffImage& img, const Ro
     };
 
     const double detM = det3(m);
-    if (std::abs(detM) < 1e-15) {
+    if (std::abs(detM) < kSingularMatrixTol) {
         return result;  // Singular matrix - points are collinear
     }
 
@@ -448,8 +481,8 @@ QString ImageProcessor::formatPlaneFit(const PlaneFit& fit, const QString& image
     }
 
     // Convert slope to angle (degrees from horizontal)
-    const double slopeX = std::atan(fit.A) * 180.0 / M_PI;
-    const double slopeY = std::atan(fit.B) * 180.0 / M_PI;
+    const double slopeX = std::atan(fit.A) * kRadToDeg;
+    const double slopeY = std::atan(fit.B) * kRadToDeg;
 
     return QString("# match3d plane fit\n"
                    "# Image: %1\n"
@@ -532,10 +565,8 @@ ImageProcessor::SphereFit ImageProcessor::fitSphere(const ViffImage& img, const 
     double g_new = 100.0;
     double g_old = 1.0;
     int iter = 0;
-    const int maxIter = 500;  // Safety limit
-    const double tol = 1e-8;   // Same as Java code
 
-    while (std::abs(g_new - g_old) > tol && iter < maxIter) {
+    while (std::abs(g_new - g_old) > kSphereFitConvergence && iter < kSphereFitMaxIter) {
         ++iter;
         g_old = g_new;
 
@@ -554,7 +585,7 @@ ImageProcessor::SphereFit ImageProcessor::fitSphere(const ViffImage& img, const 
             const double dz = zPts[i] - l;
             const double r_i = std::sqrt(dx * dx + dy * dy + dz * dz);
 
-            if (r_i < 1e-12) continue;  // Skip degenerate case
+            if (r_i < kDegenerateDistTol) continue;  // Skip degenerate case
 
             const double d_i = r_i - radius;
             const double j0 = -dx / r_i;
@@ -595,7 +626,7 @@ ImageProcessor::SphereFit ImageProcessor::fitSphere(const ViffImage& img, const 
             for (int j = 0; j <= 4; ++j)
                 std::swap(aug[col][j], aug[maxRow][j]);
 
-            if (std::abs(aug[col][col]) < 1e-15) {
+            if (std::abs(aug[col][col]) < kSingularMatrixTol) {
                 singular = true;
                 break;
             }
@@ -615,7 +646,7 @@ ImageProcessor::SphereFit ImageProcessor::fitSphere(const ViffImage& img, const 
             double sum = aug[row][4];
             for (int j = row + 1; j < 4; ++j)
                 sum -= aug[row][j] * delta[j];
-            if (std::abs(aug[row][row]) > 1e-15)
+            if (std::abs(aug[row][row]) > kSingularMatrixTol)
                 delta[row] = sum / aug[row][row];
         }
 

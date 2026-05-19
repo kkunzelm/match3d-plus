@@ -1,10 +1,34 @@
+/*
+ * Match3D+ - Dental surface comparison software
+ * Copyright (C) 2026 Karl-Heinz Kunzelmann
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ */
+
 #include "RoiMask.h"
 #include "io/ViffReader.h"
 
 #include <QFile>
 #include <QTextStream>
-#include <cmath>
 #include <algorithm>
+#include <cmath>
+#include <numbers>
+
+namespace {
+    constexpr float kDegToRadF = static_cast<float>(std::numbers::pi) / 180.0f;
+}
 
 // ── Construction ──────────────────────────────────────────────────────────────
 
@@ -111,7 +135,7 @@ void RoiMask::clipToZRange(const ViffImage& img, float zMin, float zMax) {
 void RoiMask::clipToGradient(const ViffImage& img, float maxAngleDeg) {
     // Per-axis Z threshold: one pixel step in X (or Y) of physical size ps
     // corresponds to slope angle α when dZ = ps × tan(α).
-    const float angleRad = maxAngleDeg * static_cast<float>(M_PI) / 180.0f;
+    const float angleRad = maxAngleDeg * kDegToRadF;
     const float tanA     = std::tan(angleRad);
     const float thX = (img.xPixelSize > 0.0f ? img.xPixelSize : 1.0f) * tanA;
     const float thY = (img.yPixelSize > 0.0f ? img.yPixelSize : 1.0f) * tanA;

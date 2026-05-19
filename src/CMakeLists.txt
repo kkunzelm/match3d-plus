@@ -9,7 +9,7 @@ target_include_directories(viff_io PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_features(viff_io PUBLIC cxx_std_20)
 
 # ── Main application ───────────────────────────────────────────────────────────
-add_executable(match3d_v2
+add_executable(match3d_plus
     main.cpp
     MainWindow.h
     MainWindow.cpp
@@ -43,7 +43,7 @@ add_executable(match3d_v2
     io/PlyIO.cpp
 )
 
-target_link_libraries(match3d_v2
+target_link_libraries(match3d_plus
     PRIVATE
         Qt6::Widgets
         Qt6::Concurrent
@@ -51,7 +51,7 @@ target_link_libraries(match3d_v2
         viff_io
 )
 
-target_include_directories(match3d_v2
+target_include_directories(match3d_plus
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_SOURCE_DIR}/extern/happly

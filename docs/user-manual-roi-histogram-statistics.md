@@ -1,4 +1,4 @@
-# match3d_v2 — User Manual: ROI Selection, Histogram, Statistics, and Gradient Clipping
+# Match3D+ — User Manual: ROI Selection, Histogram, Statistics, and Gradient Clipping
 
 Version: 2026-05-17
 

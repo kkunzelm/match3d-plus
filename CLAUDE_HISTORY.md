@@ -1,6 +1,6 @@
-# Match3D v2 Development History
+# Match3D+ Development History
 
-This file documents the development history of Match3D v2, a Qt6/C++20 re-implementation of the original Match3D 2.5 dental surface comparison software.
+This file documents the development history of Match3D+, a Qt6/C++20 re-implementation of the original Match3D 2.5 dental surface comparison software.
 
 ## Project Overview
 
@@ -228,7 +228,7 @@ Detection heuristic: `xPixelSize < 0.001` AND `zMax > 1000`
 
 ### Automatic All/ROI Mode Switching
 
-**Context:** Match3D v2 has two view modes controlled by radio buttons in ImageWindow:
+**Context:** Match3D+ has two view modes controlled by radio buttons in ImageWindow:
 - **All**: Shows all pixels at full brightness (no overlay/shading)
 - **ROI**: Shows only selected pixels, unselected pixels are black
 

@@ -1,6 +1,6 @@
-# Match3D v2: Registration User Manual
+# Match3D+: Registration User Manual
 
-This guide explains how to use the registration features in Match3D v2 to align two 3D surface scans and compute their difference.
+This guide explains how to use the registration features in Match3D+ to align two 3D surface scans and compute their difference.
 
 ## Table of Contents
 
@@ -22,7 +22,7 @@ This guide explains how to use the registration features in Match3D v2 to align 
 
 ## Overview
 
-Match3D v2 is designed to compare two 3D surface scans (heightmaps) by:
+Match3D+ is designed to compare two 3D surface scans (heightmaps) by:
 
 1. **Aligning** the scans so corresponding surface points overlap
 2. **Computing** the height difference at each point
@@ -399,5 +399,5 @@ After computing the difference image, statistics are displayed:
 
 ---
 
-*Match3D v2 - Qt6/C++20 Implementation*
+*Match3D+ - Qt6/C++20 Implementation*
 *For technical details, see `registration-algorithm-technical.tex`*

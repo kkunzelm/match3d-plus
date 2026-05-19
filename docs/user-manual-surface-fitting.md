@@ -1,4 +1,4 @@
-# match3d_v2 — User Manual: Surface Fitting (Plane & Sphere)
+# Match3D+ — User Manual: Surface Fitting (Plane & Sphere)
 
 Version: 2026-05-19
 

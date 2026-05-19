@@ -1,3 +1,22 @@
+/*
+ * Match3D+ - Dental surface comparison software
+ * Copyright (C) 2026 Karl-Heinz Kunzelmann
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ */
+
 #include "MainWindow.h"
 #include "ImageWindow.h"
 #include "dialogs/GlobalParametersDialog.h"
@@ -321,8 +340,8 @@ void MainWindow::onGlobalParameters() {
 }
 
 void MainWindow::onAbout() {
-    QMessageBox::about(this, "About Match3D v2",
-        "<h3>Match3D v2</h3>"
+    QMessageBox::about(this, "About Match3D+",
+        "<h3>Match3D+</h3>"
         "<p>3D surface registration and wear analysis for dental research.</p>"
         "<p><b>Author:</b><br>"
         "Prof. Dr. Karl-Heinz Kunzelmann<br>"
@@ -330,7 +349,9 @@ void MainWindow::onAbout() {
         "<p><b>Based on:</b><br>"
         "Match3D 2.5 by Wolfram Gloger</p>"
         "<p><b>Libraries:</b><br>"
-        "Qt 6, CCCoreLib (CloudCompare)</p>");
+        "Qt 6, CCCoreLib (CloudCompare)</p>"
+        "<p><b>License:</b><br>"
+        "GPL v2 or later</p>");
 }
 
 void MainWindow::onImage1SelectionChanged(QListWidgetItem* current) {

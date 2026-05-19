@@ -1,3 +1,22 @@
+/*
+ * Match3D+ - Dental surface comparison software
+ * Copyright (C) 2026 Karl-Heinz Kunzelmann
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ */
+
 // Generate synthetic wear test samples for surface fitting
 // 1. Flat plane with spherical depression (simulates flat sample wear)
 // 2. Flat plane with truncated dome (simulates antagonist with wear facet)
@@ -37,16 +56,10 @@ ViffImage generatePlaneWithDepression(uint32_t rows, uint32_t cols,
     // The sphere surface is tangent at the plane edge of the depression
     // z_sphere = cz + sqrt(r² - (x-cx)² - (y-cy)²)
     // At center (x=cx, y=cy): z = cz + r = planeHeight - depth
-    // We want max depth = sphereRadius, so cz = planeHeight - 2*r
-    // Actually, for a nice spherical cap depression:
-    // At edge of sphere (distance = r from center): z = cz + 0 = planeHeight
-    // So cz = planeHeight, and the center of depression is at z = cz + r
-    // Wait, that gives a bump. Let me reconsider.
-    //
-    // For a depression: z = planeHeight - sqrt(r² - d²) where d = distance from center
+    // Spherical cap depression geometry:
+    // z = planeHeight - sqrt(r² - d²) where d = distance from center
     // At center (d=0): z = planeHeight - r (deepest point)
     // At edge (d=r): z = planeHeight - 0 = planeHeight (flush with plane)
-    const float sphereCenterZ = planeHeight;  // sphere center at plane level
 
     std::mt19937 rng(12345);
     std::normal_distribution<float> noise(0.0f, noiseStdDev);

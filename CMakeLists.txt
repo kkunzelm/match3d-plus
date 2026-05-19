@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(match3d_v2
-    VERSION 0.1
+project(match3d_plus
+    VERSION 1.0
     LANGUAGES CXX
 )
 

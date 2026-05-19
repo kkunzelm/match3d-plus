@@ -1,10 +1,10 @@
-# Match3D v2
+# Match3D+
 
 A Qt6/C++20 application for comparing 3D surface scans by aligning them and computing height differences. Originally developed for dental wear studies, it can be used for any application requiring precise 2.5D surface comparison.
 
 ## Purpose
 
-Match3D v2 enables researchers to:
+Match3D+ enables researchers to:
 
 - **Load and visualize** 2.5D depth images (heightmaps) from laser scanners
 - **Register (align)** two surfaces using various ICP algorithms
@@ -51,8 +51,8 @@ For specimens with known geometry:
 ### Clone with Submodules
 
 ```bash
-git clone --recursive https://github.com/your-username/match3d_v2.git
-cd match3d_v2
+git clone --recursive https://github.com/kkunzelm/match3d-plus.git
+cd match3d-plus
 ```
 
 If you already cloned without `--recursive`:
@@ -72,7 +72,7 @@ make -j$(nproc)
 ### Run
 
 ```bash
-./src/match3d_v2
+./src/match3d_plus
 ```
 
 ### Utility Tools
@@ -89,7 +89,7 @@ The build also produces utility executables:
 
 ## File Format
 
-Match3D v2 uses the **VIFF (Visualization Image File Format)** for storing 2.5D depth images. VIFF files (`.xv` extension) contain:
+Match3D+ uses the **VIFF (Visualization Image File Format)** for storing 2.5D depth images. VIFF files (`.xv` extension) contain:
 
 - Single-band floating-point depth values
 - Pixel size metadata for physical coordinates
@@ -113,21 +113,42 @@ Detailed documentation is available in the `docs/` directory:
 
 ## Background
 
-Match3D v2 is a modern re-implementation of Match3D 2.5, originally developed by Wolfram Gloger at LMU Munich for dental wear research. The original software was written in C and ran on SGI IRIX workstations.
+Match3D+ is a modern re-implementation of Match3D 2.5, originally developed by Wolfram Gloger at LMU Munich for dental wear research. The original software was written in C and ran on SGI IRIX workstations.
 
 This version brings the core functionality to modern platforms using Qt6 and C++20, with improved algorithms and additional features for surface fitting and volume measurement.
 
 ## Author
 
 **Prof. Dr. Karl-Heinz Kunzelmann**
-Department of Conservative Dentistry and Periodontology
-LMU Munich
 
-Original author of the surface fitting algorithms and this Qt6/C++20 re-implementation.
+Author of this Qt6/C++20 re-implementation.
 
 ## License
 
-This project uses CCCoreLib from CloudCompare, which is licensed under GPL v2+. See `extern/CCCoreLib/LICENSE.txt` for details.
+This project is licensed under the [GNU General Public License v2](https://www.gnu.org/licenses/old-licenses/gpl-2.0.html) or later. See the [LICENSE](LICENSE) file for details.
+
+This project uses CCCoreLib from CloudCompare, which is also licensed under GPL v2+. See `extern/CCCoreLib/LICENSE.txt` for details.
+
+You are welcome to download, modify, and redistribute this software at no cost under the terms of the GPL.
+
+---
+
+## Commercial Support, Consulting, and Training
+
+However, if you are using this software in a professional, academic, or enterprise environment, I offer dedicated services to ensure your workflow runs smoothly and efficiently.
+
+### What I Offer:
+
+* **Personalized Instruction & Training:** While the core workflow is thoroughly documented, mastering the underlying concepts and navigating specific project edge cases often benefits from hands-on guidance. I offer tailored training sessions to get your team up to speed quickly.
+* **Custom Development & Consulting:** Need a specific feature, third-party integration, or performance optimization? Let's discuss your requirements to tailor the software to your exact infrastructure.
+
+### Get in Touch
+
+If your organization requires commercial backing, custom training, or development services, please reach out:
+
+* **Website:** [www.kunzelmann.de](https://www.kunzelmann.de)
+
+---
 
 ## Acknowledgments
 
