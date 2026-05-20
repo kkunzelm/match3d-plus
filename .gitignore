@@ -48,11 +48,13 @@ docs/viff-format.md
 # Project-specific: initial prompt
 first-prompt.txt
 docs/info-All-Roi-selection-stained-or-white.txt
+docs/info*
 
 
 # Project-specific: internal reference material
 data/Information/
 data/3d-data/*.java
+docs/screenshots/
 
 # LaTeX auxiliary files
 *.aux

@@ -47,7 +47,7 @@ static constexpr int kIndexRole = Qt::UserRole;
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
 {
-    setWindowTitle("Match3D 2.5");
+    setWindowTitle("Match3D+");
     createActions();
     createMenus();
     createCentralWidget();

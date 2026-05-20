@@ -204,7 +204,10 @@ void DepthImageView::rebuildGrayCast() {
             const uint32_t ur = static_cast<uint32_t>(r);
             const uint32_t uc = static_cast<uint32_t>(c);
 
-            if (!image_.isValid(ur, uc)) {
+            const bool valid = image_.isValid(ur, uc);
+            const bool selected = !roiMask_ || roiMask_->isSelected(ur, uc);
+
+            if (!valid || (!selected && roiOnly_)) {
                 line[c] = qRgb(0, 0, 0);
                 continue;
             }
@@ -229,13 +232,13 @@ void DepthImageView::rebuildGrayCast() {
             const float  cos_v = static_cast<float>(std::cos(theta));
             int gray = (cos_v < 1.0f) ? static_cast<int>(cos_v * 255.0f) : 0;
 
-            if (roiMask_ && !roiMask_->isSelected(ur, uc)) {
+            if (!selected) {
                 // Deselected pixels: blend with red tint (preserves detail visibility)
                 // 70% original gray + 30% red overlay
-                const int r = std::min(255, gray * 7 / 10 + 77);
-                const int g = gray * 7 / 10;
-                const int b = gray * 7 / 10;
-                line[c] = qRgb(r, g, b);
+                const int rr = std::min(255, gray * 7 / 10 + 77);
+                const int gg = gray * 7 / 10;
+                const int bb = gray * 7 / 10;
+                line[c] = qRgb(rr, gg, bb);
             } else {
                 line[c] = qRgb(gray, gray, gray);
             }
