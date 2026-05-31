@@ -24,7 +24,7 @@
 #include <cstdint>
 #include <vector>
 
-class ViffImage;
+struct ViffImage;
 
 // Pixel-level selection mask.  true = selected (in ROI), false = excluded.
 // Layout mirrors ViffImage: mask_[row * cols_ + col].

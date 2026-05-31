@@ -22,7 +22,7 @@
 #include <QString>
 #include <cstdint>
 
-class ViffImage;
+struct ViffImage;
 class RoiMask;
 
 // Pure static image processing functions.

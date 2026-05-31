@@ -23,7 +23,7 @@
 #include <functional>
 #include <vector>
 
-class ViffImage;
+struct ViffImage;
 class RoiMask;
 class DepthImageView;
 class HistoView;
