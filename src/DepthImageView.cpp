@@ -37,19 +37,43 @@ DepthImageView::DepthImageView(const ViffImage& img, QWidget* parent)
     setFocusPolicy(Qt::ClickFocus);
     setMinimumSize(100, 100);
 
-    // Compute initial clip range from valid pixel values
+    // Compute initial clip range and statistics from valid pixel values
     clipMin_ = std::numeric_limits<float>::max();
     clipMax_ = std::numeric_limits<float>::lowest();
+    double sum = 0.0;
+    size_t count = 0;
     for (uint32_t r = 0; r < image_.rows; ++r) {
         for (uint32_t c = 0; c < image_.cols; ++c) {
             if (image_.isValid(r, c)) {
                 float v = image_.at(r, c);
                 clipMin_ = std::min(clipMin_, v);
                 clipMax_ = std::max(clipMax_, v);
+                sum += v;
+                ++count;
             }
         }
     }
     if (clipMin_ >= clipMax_) { clipMin_ = 0.0f; clipMax_ = 1.0f; }
+
+    // Compute mean and stddev for Linear2 style (mean ± 3*stddev)
+    if (count > 0) {
+        const double mean = sum / count;
+        double sumSqDiff = 0.0;
+        for (uint32_t r = 0; r < image_.rows; ++r) {
+            for (uint32_t c = 0; c < image_.cols; ++c) {
+                if (image_.isValid(r, c)) {
+                    double diff = image_.at(r, c) - mean;
+                    sumSqDiff += diff * diff;
+                }
+            }
+        }
+        const double stddev = std::sqrt(sumSqDiff / count);
+        linear2Min_ = static_cast<float>(mean - 3.0 * stddev);
+        linear2Max_ = static_cast<float>(mean + 3.0 * stddev);
+    } else {
+        linear2Min_ = clipMin_;
+        linear2Max_ = clipMax_;
+    }
 
     // Set initial zoom with two constraints:
     // 1. Correct physical aspect ratio: use (cols*sx) × (rows*sy) as the logical image size
@@ -269,6 +293,15 @@ QRgb DepthImageView::colorForZ(float z) const {
     case ImageWindow::Style::MediumGray: {
         const float v = std::clamp(0.5f + (t - 0.5f), 0.0f, 1.0f);
         const int g = static_cast<int>(v * 255.0f);
+        return qRgb(g, g, g);
+    }
+    case ImageWindow::Style::Linear2: {
+        // Scale using mean ± 3*stddev range
+        const float range2 = linear2Max_ - linear2Min_;
+        const float t2 = (range2 > 0.0f)
+            ? std::clamp((z - linear2Min_) / range2, 0.0f, 1.0f)
+            : 0.5f;
+        const int g = static_cast<int>(t2 * 255.0f);
         return qRgb(g, g, g);
     }
     default: {
