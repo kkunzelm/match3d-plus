@@ -98,6 +98,8 @@ private:
     ImageWindow::Style style_ = ImageWindow::Style::Linear;
     float clipMin_;
     float clipMax_;
+    float linear2Min_;  // mean - 3*stddev for Linear2 style
+    float linear2Max_;  // mean + 3*stddev for Linear2 style
 
     QImage qimage_;
     bool   dirty_   = true;
