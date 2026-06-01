@@ -161,6 +161,25 @@ void DepthImageView::clearLandmarkDisplay() {
     update();
 }
 
+void DepthImageView::startSlicePickMode() {
+    cancelPolygonMode();
+    stopLandmarkPickMode();
+    sliceMode_ = true;
+    sliceHasStart_ = false;
+    sliceHasMouse_ = false;
+    setCursor(Qt::CrossCursor);
+    setFocus();
+    update();
+}
+
+void DepthImageView::cancelSlicePickMode() {
+    sliceMode_ = false;
+    sliceHasStart_ = false;
+    sliceHasMouse_ = false;
+    unsetCursor();
+    update();
+}
+
 // ── Rendering ─────────────────────────────────────────────────────────────────
 
 void DepthImageView::rebuildImage() {
@@ -411,6 +430,28 @@ void DepthImageView::paintEvent(QPaintEvent*) {
                        Qt::AlignCenter, QString::number(i + 1));
         }
     }
+
+    // Slice line overlay
+    if (sliceMode_ && sliceHasStart_) {
+        const QPointF startW = imageToWidget(
+            static_cast<float>(sliceStart_.x()),
+            static_cast<float>(sliceStart_.y()));
+
+        // Draw start point marker
+        p.setPen(QPen(Qt::cyan, 2));
+        p.setBrush(Qt::NoBrush);
+        p.drawEllipse(startW, 5.0, 5.0);
+
+        // Draw rubber-band line to mouse
+        if (sliceHasMouse_) {
+            const QPointF mouseW = imageToWidget(
+                static_cast<float>(sliceMouse_.x()),
+                static_cast<float>(sliceMouse_.y()));
+            p.setPen(QPen(Qt::cyan, 1.5, Qt::DashLine));
+            p.drawLine(startW, mouseW);
+            p.drawEllipse(mouseW, 3.0, 3.0);
+        }
+    }
 }
 
 void DepthImageView::mouseMoveEvent(QMouseEvent* event) {
@@ -428,20 +469,39 @@ void DepthImageView::mouseMoveEvent(QMouseEvent* event) {
             polyHasMouse_ = true;
             update();
         }
+        if (sliceMode_) {
+            sliceMouse_ = {static_cast<double>(col), static_cast<double>(row)};
+            sliceHasMouse_ = true;
+            update();
+        }
     } else {
         emit pixelLeft();
         if (polyMode_ != PolygonMode::None) {
             polyHasMouse_ = false;
             update();
         }
+        if (sliceMode_) {
+            sliceHasMouse_ = false;
+            update();
+        }
     }
 }
 
 void DepthImageView::mousePressEvent(QMouseEvent* event) {
+    int col, row;
     if (event->button() == Qt::RightButton) {
+        if (sliceMode_ && sliceHasStart_) {
+            // Right-click sets the end point and completes the slice
+            if (widgetToImage(event->position(), col, row)) {
+                QPointF endPt(col, row);
+                QPointF startPt = sliceStart_;
+                cancelSlicePickMode();
+                emit sliceCompleted(startPt, endPt);
+            }
+            return;
+        }
         if (polyMode_ != PolygonMode::None) {
             // Add the right-click position itself as the closing vertex
-            int col, row;
             if (widgetToImage(event->position(), col, row))
                 polyVerts_ << QPointF(col, row);
             if (polyVerts_.size() >= 3) {
@@ -456,7 +516,15 @@ void DepthImageView::mousePressEvent(QMouseEvent* event) {
         return;
     }
     if (event->button() != Qt::LeftButton) return;
-    int col, row;
+    if (sliceMode_) {
+        // Left-click sets the start point
+        if (widgetToImage(event->position(), col, row)) {
+            sliceStart_ = QPointF(col, row);
+            sliceHasStart_ = true;
+            update();
+        }
+        return;
+    }
     if (landmarkMode_) {
         if (widgetToImage(event->position(), col, row))
             emit landmarkPicked(QPointF(col, row));
@@ -486,6 +554,12 @@ void DepthImageView::mouseDoubleClickEvent(QMouseEvent* event) {
 }
 
 void DepthImageView::keyPressEvent(QKeyEvent* event) {
+    if (sliceMode_) {
+        if (event->key() == Qt::Key_Escape) {
+            cancelSlicePickMode();
+            return;
+        }
+    }
     if (landmarkMode_) {
         if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
             emit landmarkPickingDone();

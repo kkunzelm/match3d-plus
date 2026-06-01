@@ -208,21 +208,83 @@ Click **Save...** in the statistics dialog to write the same text to a `.txt` fi
 
 ## 5. Display Styles
 
-The **Style** dropdown in the toolbar controls how depth values are mapped to pixel colors.
+The **Style** dropdown in the toolbar controls how depth values are mapped to pixel colors. **Graycast** is the default style.
 
 | Style | Description |
 |-------|-------------|
-| Linear | Full grayscale from clip min (black) to clip max (white) |
+| Linear | Full grayscale from clip min (black) to clip max (white). Uses the full data range. |
 | False color | Negative values → red (darker = more negative); positive values → gray (brighter = more positive). Each half-range is normalized independently. Zero = black. |
 | Medium gray | Constant medium gray for all valid pixels; useful for checking coverage |
-| Linear 2 | Alternative linear mapping |
-| Graycast | Grayscale with exaggerated local shading to reveal surface curvature |
+| Linear±3*SD | Linear grayscale mapping using mean ± 3×standard deviation as the range. Values outside this range are clipped to black/white. This suppresses outliers and provides better contrast for the main data distribution. |
+| Graycast | **(Default)** Grayscale with exaggerated local shading to reveal surface curvature. Flat surfaces appear dark, slopes appear bright. |
 
 **False color** is intended for difference images (result of subtracting one scan from another). Red areas indicate material loss (negative Z difference), gray areas indicate material gain or no change.
 
+**Linear±3*SD** is useful when data contains extreme outliers that would otherwise compress the useful dynamic range. By mapping mean ± 3σ to the full grayscale range, approximately 99.7% of the data is visible with good contrast.
+
 ---
 
-## 6. Typical Workflow: ROI-Based Registration
+## 6. Slice View (1D Cross-Section)
+
+The slice feature displays a one-dimensional cross-section through the depth image along an arbitrary line. This is useful for measuring height profiles, step heights, and surface roughness along a specific path.
+
+### 6.1 Creating a Slice
+
+1. Open **Process → Show Slice...**
+2. The status bar shows: *"Slice: left-click to set start point, right-click to set end point — Esc to cancel"*
+3. **Left-click** anywhere in the image to set the start point (a cyan dot appears)
+4. Move the mouse to see a dashed cyan preview line
+5. **Right-click** to set the end point and create the slice
+6. Press **Esc** to cancel without creating a slice
+
+The slice line can have any orientation — horizontal, vertical, or diagonal.
+
+### 6.2 Reading the Slice Window
+
+The Slice window displays the depth profile along the selected line:
+
+- **Horizontal axis (X):** Distance along the slice in millimeters, from 0 (start point) to the total slice length (end point)
+- **Vertical axis (Y):** Interpolated Z values (depth) at each position along the slice
+- **White line:** The depth profile. Gaps indicate invalid pixels along the slice path.
+
+Z values are computed using bilinear interpolation from the four surrounding pixels at each sample point.
+
+### 6.3 Measuring with the Slice
+
+**Coordinate display:**
+- Move the mouse over the slice plot to see coordinates in the status bar
+- Coordinates are shown as `x=... mm  y=...` (distance along slice, depth value)
+
+**Relative measurements:**
+1. **Left-click** on the slice plot to set a reference point (yellow crosshair marker)
+2. **Right-click** to toggle between absolute and relative coordinate display
+3. In relative mode, coordinates are shown as `dx=... mm  dy=...` (distance and height difference from the reference point)
+
+This makes it easy to measure:
+- Step heights between two points
+- Distance between features
+- Depth of grooves or height of ridges
+
+### 6.4 Saving Slice Data
+
+**File → Save...** exports the slice profile as a tab-separated text file:
+
+```
+# Match3D+ slice data
+# Start point (col, row): 100.0, 150.0
+# End point (col, row): 300.0, 150.0
+# Slice length: 2.500 mm
+# Format: distance_mm  z_value
+0.000000	1.234567
+0.012500	1.234890
+...
+```
+
+This format can be imported into spreadsheet software or plotting programs for further analysis.
+
+---
+
+## 7. Typical Workflow: ROI-Based Registration
 
 1. Open the model image and the data image.
 2. In the model image, draw a polygon around the region of interest (**Edit → Select polygon**). Check the result with the **ROI** radio button.

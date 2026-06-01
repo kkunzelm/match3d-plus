@@ -23,6 +23,7 @@
 #include "MainWindow.h"
 #include "dialogs/HistogramDialog.h"
 #include "dialogs/MatchingControlPanel.h"
+#include "dialogs/SliceDialog.h"
 
 #include <QAction>
 #include <QButtonGroup>
@@ -249,6 +250,18 @@ void ImageWindow::showHistogramDialog() {
         [this](float zMin, float zMax){
             applyRoiOp([this, zMin, zMax](RoiMask& m){ m.clipToZRange(image_, zMin, zMax); });
         }, this);
+    dlg.exec();
+}
+
+void ImageWindow::startSlicePick() {
+    statusBar()->showMessage(
+        "Slice: left-click to set start point, right-click to set end point — Esc to cancel");
+    depthView_->startSlicePickMode();
+}
+
+void ImageWindow::onSliceCompleted(QPointF startPt, QPointF endPt) {
+    statusBar()->clearMessage();
+    SliceDialog dlg(image_, startPt, endPt, this);
     dlg.exec();
 }
 
@@ -626,7 +639,8 @@ void ImageWindow::createMenus() {
     connect(procMenu->addAction("Statistics..."), &QAction::triggered, this,
             [this]{ showStatisticsDialog(); });
     procMenu->addAction("Zoom...")->setEnabled(false);
-    procMenu->addAction("Show Slice...")->setEnabled(false);
+    connect(procMenu->addAction("Show Slice..."), &QAction::triggered,
+            this, &ImageWindow::startSlicePick);
     procMenu->addAction("Show 3D View...")->setEnabled(false);
 
     // ── Match ─────────────────────────────────────────────────────────────────
@@ -751,7 +765,8 @@ void ImageWindow::createToolBar() {
 
     tb->addWidget(new QLabel("Style  "));
     styleCombo_ = new QComboBox;
-    styleCombo_->addItems({"Linear", "False color", "Medium gray", "Linear 2", "Graycast"});
+    styleCombo_->addItems({"Linear", "False color", "Medium gray", "Linear±3*SD", "Graycast"});
+    styleCombo_->setCurrentIndex(4);  // Default to Graycast
     tb->addWidget(styleCombo_);
 
     tb->addSeparator();
@@ -800,6 +815,8 @@ void ImageWindow::createCentralWidget() {
             [this]{ coordLabel_->setText("x=         y=         z=         "); });
     connect(depthView_, &DepthImageView::polygonCompleted,
             this, &ImageWindow::onPolygonCompleted);
+    connect(depthView_, &DepthImageView::sliceCompleted,
+            this, &ImageWindow::onSliceCompleted);
 }
 
 void ImageWindow::createStatusBar() {

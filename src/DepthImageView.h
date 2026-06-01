@@ -62,6 +62,10 @@ public:
     void setLandmarkDisplay(const QVector<QPointF>& pts);
     void clearLandmarkDisplay();
 
+    // Slice pick mode: left-click sets start, right-click sets end and completes.
+    void startSlicePickMode();
+    void cancelSlicePickMode();
+
 signals:
     void pixelHovered(int col, int row, float z);
     void pixelLeft();
@@ -71,6 +75,8 @@ signals:
     void landmarkPicked(QPointF imagePos);
     // Emitted when user presses Enter or double-clicks in landmark pick mode.
     void landmarkPickingDone();
+    // Emitted when user completes slice selection (right-click sets end point).
+    void sliceCompleted(QPointF startPt, QPointF endPt);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -95,7 +101,7 @@ private:
     const ViffImage& image_;
     const RoiMask*   roiMask_ = nullptr;
 
-    ImageWindow::Style style_ = ImageWindow::Style::Linear;
+    ImageWindow::Style style_ = ImageWindow::Style::GrayCast;
     float clipMin_;
     float clipMax_;
     float linear2Min_;  // mean - 3*stddev for Linear2 style
@@ -117,4 +123,11 @@ private:
     // Landmark pick mode state
     bool             landmarkMode_    = false;
     QVector<QPointF> landmarkDisplay_;  // image coords of displayed landmarks
+
+    // Slice pick mode state
+    bool    sliceMode_      = false;
+    bool    sliceHasStart_  = false;
+    QPointF sliceStart_;              // image coords of slice start point
+    QPointF sliceMouse_;              // current mouse position for rubber band
+    bool    sliceHasMouse_  = false;
 };

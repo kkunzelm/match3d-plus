@@ -31,7 +31,7 @@ For specimens with known geometry:
 
 ## Features
 
-- Multiple visualization styles: Linear grayscale, false color, Graycast shading
+- Multiple visualization styles: Linear grayscale, Linear±3*SD, false color, Graycast shading (default)
 - Region of Interest (ROI) selection: Polygon, rectangle, ellipse, strips
 - Gradient clipping to exclude steep surfaces with poor scan quality
 - Interactive histogram with adjustable Z-range clipping

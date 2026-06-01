@@ -24,6 +24,7 @@
 #include "RoiMask.h"
 
 #include <QMainWindow>
+#include <QPointF>
 #include <QString>
 
 class QCheckBox;
@@ -85,12 +86,14 @@ private:
     void showHistogramDialog();
     void showFitPlaneDialog();
     void showFitSphereDialog();
+    void startSlicePick();
+    void onSliceCompleted(QPointF startPt, QPointF endPt);
 
     int index_;
     QString path_;
     ViffImage image_;
     RoiMask roiMask_;
-    Style style_ = Style::Linear;
+    Style style_ = Style::GrayCast;
     Transformation3D matchTransform_;
 
     // Saved on load for "Scale to original"

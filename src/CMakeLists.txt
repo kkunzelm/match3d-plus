@@ -30,6 +30,8 @@ add_executable(match3d_plus
     dialogs/HistogramDialog.cpp
     dialogs/MatchingControlPanel.h
     dialogs/MatchingControlPanel.cpp
+    dialogs/SliceDialog.h
+    dialogs/SliceDialog.cpp
     registration/Transformation3D.h
     registration/CoarseRegistration.h
     registration/CoarseRegistration.cpp
