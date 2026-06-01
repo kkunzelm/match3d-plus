@@ -131,6 +131,7 @@ private:
     QCheckBox*      cbFlip_     = nullptr;
     QCheckBox*      cbMinDiff_  = nullptr;  QDoubleSpinBox* sbMinDiff_ = nullptr;
     QCheckBox*      cbMaxDiff_  = nullptr;  QDoubleSpinBox* sbMaxDiff_ = nullptr;
+    QCheckBox*      cbAutoMatch_ = nullptr; QDoubleSpinBox* sbAutoMatchThresh_ = nullptr;
 
     // Action buttons (need member pointers to enable/disable during registration)
     QPushButton*    btnAlign_     = nullptr;  // 4-DOF registration

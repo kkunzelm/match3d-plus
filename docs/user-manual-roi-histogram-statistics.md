@@ -284,7 +284,57 @@ This format can be imported into spreadsheet software or plotting programs for f
 
 ---
 
-## 7. Typical Workflow: ROI-Based Registration
+## 7. Auto-Matching for Wear Measurement
+
+### 7.1 The Problem with Manual Reference Selection
+
+Traditional wear measurement without fixed reference points (brackets, markers) requires selecting areas on the tooth surface that have not changed between measurements. These could be fissures or non-occluding enamel areas. However:
+
+- Large restorations often leave only small enamel reference areas
+- Small reference areas may have subtle changes that go undetected
+- If registration is based on changed reference areas, the calculated wear will be incorrect
+- This can manifest as impossible "material gain" appearing in parts of the difference image
+
+### 7.2 The Auto-Matching Solution
+
+**Auto-Matching** uses a-priori knowledge: wear only removes material — it never adds material. After correct registration, the follow-up model can only be "below" the baseline model (negative Z difference = material loss), never "above" it.
+
+The algorithm implements this by:
+1. Defining a noise threshold (default: 5 µm)
+2. During each ICP iteration, excluding correspondences where `diff > +threshold`
+3. This weights positive differences more heavily, pushing the registration to minimize them
+4. The final result has all differences within the noise band, except for actual wear areas
+
+### 7.3 Using Auto-Matching
+
+1. Open the Matching Control Panel (**Match → Parameters...**)
+2. Check the **Auto-Matching** checkbox
+3. Adjust the **Threshold** if needed (default 0.005 mm = 5 µm corresponds to sensor noise)
+4. Run **Align** (4-DOF) or **Refine** (6-DOF)
+   - Note: CCCoreLib ICP does not support Auto-Matching
+5. The status bar indicates when Auto-Matching is active
+
+### 7.4 When to Use Auto-Matching
+
+| Situation | Recommendation |
+|-----------|----------------|
+| Large reference areas available | Manual ROI selection (Schmelz-Matching) may be sufficient |
+| Small or uncertain reference areas | Use Auto-Matching |
+| Difference image shows unexpected "material gain" | Re-run with Auto-Matching |
+| Very noisy data | Increase the threshold slightly |
+
+### 7.5 Technical Details
+
+The threshold should be set to approximately the sensor noise level:
+- Too low: May over-constrain the registration
+- Too high: Won't effectively suppress false positive outliers
+- Typical value: 5 µm (0.005 mm) for laser scanner data
+
+Auto-Matching is applied during the ICP correspondence search. Points where `model_z - transformed_data_z > threshold` are excluded from the optimization, causing the algorithm to iteratively adjust until all positive differences are within the noise band.
+
+---
+
+## 8. Typical Workflow: ROI-Based Registration
 
 1. Open the model image and the data image.
 2. In the model image, draw a polygon around the region of interest (**Edit → Select polygon**). Check the result with the **ROI** radio button.

@@ -188,6 +188,16 @@ void RegistrationWorker::run4DOF() {
                 const double dz = (1-fr) * ((1-fc) * dataImg.at(r0, c0) + fc * dataImg.at(r0, c1))
                                 + fr * ((1-fc) * dataImg.at(r1, c0) + fc * dataImg.at(r1, c1));
 
+                // Auto-Matching: exclude positive differences beyond noise threshold
+                // diff = model_z - (data_z + tz) = mz - dz - tz
+                // Positive diff means model > transformed data (impossible material gain)
+                if (cfg_.autoMatching) {
+                    const double diff = mz - (dz + currentTransform.tz);
+                    if (diff > cfg_.autoMatchingThreshold) {
+                        continue;  // Exclude this correspondence
+                    }
+                }
+
                 // Store corresponding points
                 // Model point (target)
                 modelXs.push_back(mx);
@@ -478,6 +488,16 @@ void RegistrationWorker::run6DOF() {
                 const double px_t = R[0][0]*px + R[0][1]*py + R[0][2]*pz + T.tx;
                 const double py_t = R[1][0]*px + R[1][1]*py + R[1][2]*pz + T.ty;
                 const double pz_t = R[2][0]*px + R[2][1]*py + R[2][2]*pz + T.tz;
+
+                // Auto-Matching: exclude positive Z differences beyond noise threshold
+                // Z diff = model_z - transformed_data_z = qz - pz_t
+                // Positive means model > data (impossible material gain in wear)
+                if (cfg_.autoMatching) {
+                    const double zDiff = qz - pz_t;
+                    if (zDiff > cfg_.autoMatchingThreshold) {
+                        ++dbgOutlier; continue;  // Exclude this correspondence
+                    }
+                }
 
                 // Point-to-plane residual in model space: r = n · (P' - Q)
                 const double residual = (nx * (px_t - qx) + ny * (py_t - qy) + nz * (pz_t - qz)) / nlen;

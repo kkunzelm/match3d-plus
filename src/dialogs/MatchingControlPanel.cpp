@@ -208,6 +208,28 @@ MatchingControlPanel::MatchingControlPanel(
     matchRow2->addWidget(cbMaxDiff_);
     matchRow2->addWidget(sbMaxDiff_);
     matchLayout->addLayout(matchRow2);
+
+    // Auto-Matching row
+    auto* matchRow3 = new QHBoxLayout;
+    cbAutoMatch_ = new QCheckBox("Auto-Matching");
+    cbAutoMatch_->setToolTip(
+        "Use a-priori knowledge that wear only removes material.\n"
+        "Excludes positive differences (material gain) beyond the noise threshold\n"
+        "during ICP, forcing the algorithm to minimize positive outliers.\n"
+        "This eliminates the need for manual selection of reference areas.");
+    sbAutoMatchThresh_ = new QDoubleSpinBox;
+    sbAutoMatchThresh_->setRange(0.0, 1.0);
+    sbAutoMatchThresh_->setDecimals(4);
+    sbAutoMatchThresh_->setSingleStep(0.001);
+    sbAutoMatchThresh_->setValue(0.005);  // 5 µm default
+    sbAutoMatchThresh_->setSuffix(" mm");
+    sbAutoMatchThresh_->setToolTip("Noise threshold (default 0.005 mm = 5 µm)");
+    matchRow3->addWidget(cbAutoMatch_);
+    matchRow3->addWidget(new QLabel("Threshold:"));
+    matchRow3->addWidget(sbAutoMatchThresh_);
+    matchRow3->addStretch();
+    matchLayout->addLayout(matchRow3);
+
     mainLayout->addWidget(matchGroup);
 
     // ── Action buttons ────────────────────────────────────────────────────────
@@ -584,6 +606,8 @@ void MatchingControlPanel::onAlign() {
     const int outlierPct = sbOutlq_->value(); // e.g. 5 = 5% outliers removed
     cfg.overlapRatio     = std::clamp(1.0 - outlierPct / 100.0, 0.01, 1.0);
     cfg.minRMSDecrease   = 1.0e-5;
+    cfg.autoMatching          = cbAutoMatch_->isChecked();
+    cfg.autoMatchingThreshold = sbAutoMatchThresh_->value();
 
     // Create worker and thread (worker_ / workerThread_ stay set until finished)
     workerThread_ = new QThread;
@@ -605,7 +629,9 @@ void MatchingControlPanel::onAlign() {
     btnRefine_->setEnabled(false);
     btnCCLibICP_->setEnabled(false);
     btnStop_->setEnabled(true);
-    icpStatusLabel_->setText("Align (4-DOF) running...");
+    icpStatusLabel_->setText(cbAutoMatch_->isChecked()
+        ? "Align (4-DOF, Auto-Matching) running..."
+        : "Align (4-DOF) running...");
     icpStatusLabel_->setVisible(true);
 
     workerThread_->start();
@@ -640,6 +666,8 @@ void MatchingControlPanel::onRefine() {
     cfg.samplingLimit    = std::max(3, sbMinPs_->value());
     cfg.minRMSDecrease   = 1.0e-5;
     cfg.use6DOF          = true;  // Enable 6-DOF point-to-plane refinement
+    cfg.autoMatching          = cbAutoMatch_->isChecked();
+    cfg.autoMatchingThreshold = sbAutoMatchThresh_->value();
 
     // Create worker and thread
     workerThread_ = new QThread;
@@ -661,7 +689,9 @@ void MatchingControlPanel::onRefine() {
     btnRefine_->setEnabled(false);
     btnCCLibICP_->setEnabled(false);
     btnStop_->setEnabled(true);
-    icpStatusLabel_->setText("Refine (6-DOF point-to-plane) running...");
+    icpStatusLabel_->setText(cbAutoMatch_->isChecked()
+        ? "Refine (6-DOF, Auto-Matching) running..."
+        : "Refine (6-DOF point-to-plane) running...");
     icpStatusLabel_->setVisible(true);
 
     workerThread_->start();
@@ -686,6 +716,14 @@ void MatchingControlPanel::onCCLibICP() {
     }
 
     // Build worker config for CCCoreLib ICP
+    // Note: Auto-Matching is not supported with CCCoreLib ICP
+    if (cbAutoMatch_->isChecked()) {
+        QMessageBox::warning(this, "ICP",
+            "Auto-Matching is not supported with CCCoreLib ICP.\n"
+            "Use Align or Refine for Auto-Matching, or disable Auto-Matching.");
+        return;
+    }
+
     RegistrationWorker::Config cfg;
     cfg.modelImg         = target->image();
     cfg.modelRoi         = target->roiMask();

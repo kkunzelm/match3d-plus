@@ -49,6 +49,13 @@ public:
         double minRMSDecrease = 1.0e-5;
         bool   use6DOF        = false;  // false = 4-DOF (Align), true = 6-DOF (Refine)
         bool   useCCLibICP    = false;  // true = use CCCoreLib ICP instead of custom Align
+        // Auto-Matching: exclude positive differences beyond noise threshold
+        // This implements the a-priori knowledge that wear only removes material.
+        // Positive differences (follow-up > baseline) beyond the noise threshold
+        // are excluded from correspondence search, forcing the algorithm to
+        // minimize positive outliers. See Kunzelmann thesis for details.
+        bool   autoMatching         = false;
+        double autoMatchingThreshold = 0.005;  // mm (5 µm default noise threshold)
     };
 
     explicit RegistrationWorker(Config cfg, QObject* parent = nullptr);
