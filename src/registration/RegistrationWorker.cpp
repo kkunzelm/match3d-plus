@@ -188,13 +188,15 @@ void RegistrationWorker::run4DOF() {
                 const double dz = (1-fr) * ((1-fc) * dataImg.at(r0, c0) + fc * dataImg.at(r0, c1))
                                 + fr * ((1-fc) * dataImg.at(r1, c0) + fc * dataImg.at(r1, c1));
 
-                // Auto-Matching: exclude positive differences beyond noise threshold
-                // diff = model_z - (data_z + tz) = mz - dz - tz
-                // Positive diff means model > transformed data (impossible material gain)
+                // Auto-Matching: exclude negative differences beyond noise threshold
+                // diff = model_z - (data_z + tz) = baseline_z - followup_z
+                // Positive diff: baseline > followup = wear (material removed) - expected
+                // Negative diff: baseline < followup = "material gain" - impossible
+                // We exclude correspondences where diff < -threshold (material gain beyond noise)
                 if (cfg_.autoMatching) {
                     const double diff = mz - (dz + currentTransform.tz);
-                    if (diff > cfg_.autoMatchingThreshold) {
-                        continue;  // Exclude this correspondence
+                    if (diff < -cfg_.autoMatchingThreshold) {
+                        continue;  // Exclude "material gain" outliers
                     }
                 }
 
@@ -489,13 +491,15 @@ void RegistrationWorker::run6DOF() {
                 const double py_t = R[1][0]*px + R[1][1]*py + R[1][2]*pz + T.ty;
                 const double pz_t = R[2][0]*px + R[2][1]*py + R[2][2]*pz + T.tz;
 
-                // Auto-Matching: exclude positive Z differences beyond noise threshold
-                // Z diff = model_z - transformed_data_z = qz - pz_t
-                // Positive means model > data (impossible material gain in wear)
+                // Auto-Matching: exclude negative Z differences beyond noise threshold
+                // Z diff = model_z - transformed_data_z = baseline_z - followup_z
+                // Positive diff: baseline > followup = wear (material removed) - expected
+                // Negative diff: baseline < followup = "material gain" - impossible
+                // We exclude correspondences where diff < -threshold (material gain beyond noise)
                 if (cfg_.autoMatching) {
                     const double zDiff = qz - pz_t;
-                    if (zDiff > cfg_.autoMatchingThreshold) {
-                        ++dbgOutlier; continue;  // Exclude this correspondence
+                    if (zDiff < -cfg_.autoMatchingThreshold) {
+                        ++dbgOutlier; continue;  // Exclude "material gain" outliers
                     }
                 }
 

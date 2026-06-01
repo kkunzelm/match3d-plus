@@ -301,9 +301,9 @@ Traditional wear measurement without fixed reference points (brackets, markers) 
 
 The algorithm implements this by:
 1. Defining a noise threshold (default: 5 µm)
-2. During each ICP iteration, excluding correspondences where `diff > +threshold`
-3. This weights positive differences more heavily, pushing the registration to minimize them
-4. The final result has all differences within the noise band, except for actual wear areas
+2. During each ICP iteration, excluding correspondences where `diff < -threshold` (i.e., "material gain" beyond noise)
+3. This allows wear (positive differences) while filtering impossible "material gain" outliers
+4. The final result has no significant "material gain" areas, only actual wear
 
 ### 7.3 Using Auto-Matching
 
@@ -330,7 +330,7 @@ The threshold should be set to approximately the sensor noise level:
 - Too high: Won't effectively suppress false positive outliers
 - Typical value: 5 µm (0.005 mm) for laser scanner data
 
-Auto-Matching is applied during the ICP correspondence search. Points where `model_z - transformed_data_z > threshold` are excluded from the optimization, causing the algorithm to iteratively adjust until all positive differences are within the noise band.
+Auto-Matching is applied during the ICP correspondence search. Points where `baseline_z - followup_z < -threshold` (i.e., follow-up appears above baseline by more than the noise threshold) are excluded from the optimization. This forces the algorithm to iteratively adjust until no "material gain" outliers remain beyond the noise level.
 
 ---
 
