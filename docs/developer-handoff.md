@@ -364,6 +364,39 @@ dlg.exec();  // Blocks until closed
 
 Used for: Statistics, Histogram, and Diff Image statistics dialogs.
 
+### QString::arg Format Placeholders
+
+Qt uses `%1`, `%2`, `%3` placeholders, not C-style `%.2f`:
+```cpp
+// CORRECT (Qt)
+QString s = tr("Size: %1 × %2 × %3 mm")
+    .arg(x, 0, 'f', 2)
+    .arg(y, 0, 'f', 2)
+    .arg(z, 0, 'f', 2);
+
+// WRONG (C-style printf format - causes "Argument missing" warnings)
+QString s = tr("Size: %.2f × %.2f × %.2f mm")
+    .arg(x, 0, 'f', 2)  // These won't match %.2f
+```
+
+### imageWindows_ Contains Nullptr Entries
+
+`MainWindow::imageWindows_` is a sparse vector — closed windows become `nullptr`:
+```cpp
+// WRONG - crashes on closed windows
+for (const auto* w : imageWindows_) {
+    w->someMethod();  // Crash if w is nullptr
+}
+
+// CORRECT - skip nullptr entries
+for (const auto* w : imageWindows_) {
+    if (!w) continue;
+    w->someMethod();
+}
+```
+
+The `imageWindows()` helper method returns only non-null entries.
+
 ---
 
 ## GUI Layout
@@ -469,6 +502,9 @@ Generates wear samples for testing surface fitting:
 - Graycast shading in 2D projection preview (toggleable)
 - Resolution management: global default + "Copy from" open images
 - Fixed quick alignment button i18n comparison
+- Fixed QString format strings (use `%1` not `%.2f`)
+- Fixed null pointer crash when iterating `imageWindows_`
+- Winding order correction for Primescan STL files (per-face normal check)
 
 ### 2026-06-02 – Non-Modal Dialogs
 
