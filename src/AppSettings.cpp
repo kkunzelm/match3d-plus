@@ -33,6 +33,10 @@ void AppSettings::load(QSettings& s) {
     fpFitpixel = s.value("fpFitpixel", fpFitpixel).toInt();
     fpHoehe    = s.value("fpHoehe",    fpHoehe).toFloat();
     s.endGroup();
+
+    s.beginGroup("STLImport");
+    stlResolution = s.value("resolution", stlResolution).toFloat();
+    s.endGroup();
 }
 
 void AppSettings::save(QSettings& s) const {
@@ -48,5 +52,9 @@ void AppSettings::save(QSettings& s) const {
     s.setValue("scaleZ",     scaleZ);
     s.setValue("fpFitpixel", fpFitpixel);
     s.setValue("fpHoehe",    fpHoehe);
+    s.endGroup();
+
+    s.beginGroup("STLImport");
+    s.setValue("resolution", stlResolution);
     s.endGroup();
 }

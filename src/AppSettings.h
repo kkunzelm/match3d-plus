@@ -36,6 +36,9 @@ struct AppSettings {
     int   fpFitpixel   = 10;
     float fpHoehe      = 2000.0f;
 
+    // STL Import settings
+    float stlResolution = 0.025f;  // mm/pixel for STL projection
+
     void load(QSettings& s);
     void save(QSettings& s) const;
 };

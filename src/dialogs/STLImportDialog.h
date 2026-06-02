@@ -18,8 +18,10 @@
 #include "io/ViffReader.h"
 
 #include <QDialog>
+#include <QImage>
 #include <Eigen/Core>
 #include <memory>
+#include <vector>
 
 class STLPreviewWidget;
 class QLabel;
@@ -27,6 +29,16 @@ class QSlider;
 class QDoubleSpinBox;
 class QCheckBox;
 class QPushButton;
+class QComboBox;
+
+struct AppSettings;
+
+/// Info about an open image for resolution selection
+struct OpenImageInfo {
+    QString name;
+    float xPixelSize;  // mm per pixel
+    float yPixelSize;
+};
 
 /**
  * @brief Dialog for STL import with interactive 3D orientation
@@ -47,9 +59,14 @@ public:
     /**
      * @brief Construct dialog and load STL file
      * @param filePath Path to STL file
+     * @param settings Global settings for default resolution (can be nullptr)
+     * @param openImages List of open images for "copy resolution from" feature
      * @param parent Parent widget
      */
-    explicit STLImportDialog(const QString& filePath, QWidget* parent = nullptr);
+    explicit STLImportDialog(const QString& filePath,
+                             AppSettings* settings = nullptr,
+                             const std::vector<OpenImageInfo>& openImages = {},
+                             QWidget* parent = nullptr);
     ~STLImportDialog() override = default;
 
     /// Get the projected heightmap (valid after accept())
@@ -98,7 +115,17 @@ private:
     // Resolution
     QDoubleSpinBox* m_spinResolution = nullptr;
     QCheckBox* m_checkAutoSize = nullptr;
+    QCheckBox* m_checkGraycast = nullptr;
+    QComboBox* m_comboResFrom = nullptr;
 
     // Buttons
     QPushButton* m_btnImport = nullptr;
+
+    // Settings and open images
+    AppSettings* m_settings = nullptr;
+    std::vector<OpenImageInfo> m_openImages;
+
+    // ── Preview rendering helpers ───────────────────────────────────────────
+    QImage renderGraycast(const ViffImage& img, float zMin, float zMax);
+    QImage renderLinear(const ViffImage& img, float zMin, float zMax);
 };

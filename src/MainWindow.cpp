@@ -407,11 +407,24 @@ void MainWindow::onOpenStl() {
 
     lastDir_ = QFileInfo(path).absolutePath();
 
-    STLImportDialog dlg(path, this);
+    // Collect info about open images for "copy resolution from" feature
+    std::vector<OpenImageInfo> openImgInfos;
+    for (const auto* w : imageWindows_) {
+        OpenImageInfo info;
+        info.name = QFileInfo(w->imagePath()).fileName();
+        info.xPixelSize = w->image().xPixelSize;
+        info.yPixelSize = w->image().yPixelSize;
+        openImgInfos.push_back(info);
+    }
+
+    STLImportDialog dlg(path, &settings_, openImgInfos, this);
     if (dlg.exec() == QDialog::Accepted && dlg.isValid()) {
         ViffImage img = dlg.getProjectedImage();
         QString title = QFileInfo(path).fileName() + " (projected)";
         openImageWindow(std::move(img), title);
+
+        // Update global settings with the used resolution
+        settings_.stlResolution = img.xPixelSize * 1000.0f;  // Convert m to mm
     }
 }
 #endif

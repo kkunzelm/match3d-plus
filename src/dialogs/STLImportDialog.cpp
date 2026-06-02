@@ -2,9 +2,14 @@
 #include "visualization3d/STLPreviewWidget.h"
 #include "mesh3d/STLReader.h"
 #include "mesh3d/MeshProjection.h"
+#include "../AppSettings.h"
+
+#include <cmath>
+#include <algorithm>
 
 #include <QBoxLayout>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
 #include <QFileInfo>
@@ -19,9 +24,14 @@
 
 // ── Constructor ──────────────────────────────────────────────────────────────
 
-STLImportDialog::STLImportDialog(const QString& filePath, QWidget* parent)
+STLImportDialog::STLImportDialog(const QString& filePath,
+                                 AppSettings* settings,
+                                 const std::vector<OpenImageInfo>& openImages,
+                                 QWidget* parent)
     : QDialog(parent)
     , m_filePath(filePath)
+    , m_settings(settings)
+    , m_openImages(openImages)
 {
     setWindowTitle(tr("Import STL: %1").arg(QFileInfo(filePath).fileName()));
     setMinimumSize(1000, 700);
@@ -125,7 +135,9 @@ void STLImportDialog::setupUI()
 
     m_spinResolution = new QDoubleSpinBox(resGroup);
     m_spinResolution->setRange(0.001, 1.0);
-    m_spinResolution->setValue(0.025);
+    // Use global settings if available, otherwise default
+    double defaultRes = m_settings ? static_cast<double>(m_settings->stlResolution) : 0.025;
+    m_spinResolution->setValue(defaultRes);
     m_spinResolution->setSingleStep(0.005);
     m_spinResolution->setDecimals(3);
     m_spinResolution->setSuffix(tr(" mm/px"));
@@ -133,9 +145,37 @@ void STLImportDialog::setupUI()
             this, &STLImportDialog::onResolutionChanged);
     resLayout->addRow(tr("Resolution:"), m_spinResolution);
 
+    // "Copy resolution from" combo (only if there are open images)
+    if (!m_openImages.empty()) {
+        m_comboResFrom = new QComboBox(resGroup);
+        m_comboResFrom->addItem(tr("-- Copy from --"));
+        for (const auto& img : m_openImages) {
+            // Show resolution as average of x and y pixel sizes
+            float avgRes = (img.xPixelSize + img.yPixelSize) / 2.0f * 1000.0f;  // Convert m to mm
+            m_comboResFrom->addItem(tr("%1 (%.3f mm/px)")
+                .arg(img.name)
+                .arg(static_cast<double>(avgRes), 0, 'f', 3));
+        }
+        connect(m_comboResFrom, QOverload<int>::of(&QComboBox::currentIndexChanged),
+                this, [this](int idx) {
+            if (idx > 0 && idx <= static_cast<int>(m_openImages.size())) {
+                const auto& img = m_openImages[static_cast<size_t>(idx - 1)];
+                // Use average of x and y pixel sizes, convert from m to mm
+                float avgRes = (img.xPixelSize + img.yPixelSize) / 2.0f * 1000.0f;
+                m_spinResolution->setValue(static_cast<double>(avgRes));
+            }
+        });
+        resLayout->addRow(tr("Copy from:"), m_comboResFrom);
+    }
+
     m_checkAutoSize = new QCheckBox(tr("Auto size"), resGroup);
     m_checkAutoSize->setChecked(true);
     resLayout->addRow(m_checkAutoSize);
+
+    m_checkGraycast = new QCheckBox(tr("Graycast shading"), resGroup);
+    m_checkGraycast->setChecked(true);
+    connect(m_checkGraycast, &QCheckBox::toggled, this, &STLImportDialog::updateProjectionPreview);
+    resLayout->addRow(m_checkGraycast);
 
     controlsLayout->addWidget(resGroup);
 
@@ -256,16 +296,18 @@ void STLImportDialog::onQuickAlignClicked()
     auto* btn = qobject_cast<QPushButton*>(sender());
     if (!btn) return;
 
+    // Use property instead of translated text for reliable comparison
     QString text = btn->text();
 
-    if (text == "Top")           m_preview3D->setViewTop();
-    else if (text == "Bottom")   m_preview3D->setViewBottom();
-    else if (text == "Front")    m_preview3D->setViewFront();
-    else if (text == "Back")     m_preview3D->setViewBack();
-    else if (text == "90X")      m_preview3D->rotateX90();
-    else if (text == "90Y")      m_preview3D->rotateY90();
-    else if (text == "90Z")      m_preview3D->rotateZ90();
-    else if (text == "Reset")    m_preview3D->resetTransform();
+    // Compare against both translated and untranslated strings
+    if (text == tr("Top") || text == "Top")           m_preview3D->setViewTop();
+    else if (text == tr("Bottom") || text == "Bottom") m_preview3D->setViewBottom();
+    else if (text == tr("Front") || text == "Front")   m_preview3D->setViewFront();
+    else if (text == tr("Back") || text == "Back")     m_preview3D->setViewBack();
+    else if (text == tr("90X") || text == "90X")       m_preview3D->rotateX90();
+    else if (text == tr("90Y") || text == "90Y")       m_preview3D->rotateY90();
+    else if (text == tr("90Z") || text == "90Z")       m_preview3D->rotateZ90();
+    else if (text == tr("Reset") || text == "Reset")   m_preview3D->resetTransform();
 }
 
 void STLImportDialog::updateProjectionPreview()
@@ -285,42 +327,113 @@ void STLImportDialog::updateProjectionPreview()
         .arg(result.image.rows)
         .arg(result.coveragePercent, 0, 'f', 1));
 
-    // Create preview image (scaled down for display)
-    int imgWidth = static_cast<int>(result.image.cols);
-    int imgHeight = static_cast<int>(result.image.rows);
-    int previewWidth = std::min(300, imgWidth);
-    int previewHeight = std::min(300, imgHeight);
-
     // Find Z range for normalization
     float zMin = static_cast<float>(result.zMin);
     float zMax = static_cast<float>(result.zMax);
-    float zRange = zMax - zMin;
-    if (zRange < 1e-6f) zRange = 1.0f;
 
-    // Create QImage
-    QImage img(imgWidth, imgHeight, QImage::Format_Grayscale8);
-
-    for (int y = 0; y < imgHeight; ++y) {
-        for (int x = 0; x < imgWidth; ++x) {
-            size_t idx = static_cast<size_t>(y) * imgWidth + x;
-            float z = result.image.data[idx];
-
-            uint8_t gray;
-            if (z == 0.0f) {  // No data
-                gray = 0;
-            } else {
-                float norm = (z - zMin) / zRange;
-                gray = static_cast<uint8_t>(std::clamp(norm * 255.0f, 0.0f, 255.0f));
-            }
-            img.setPixel(x, y, qRgb(gray, gray, gray));
-        }
-    }
+    // Render with selected style
+    QImage img = m_checkGraycast->isChecked()
+        ? renderGraycast(result.image, zMin, zMax)
+        : renderLinear(result.image, zMin, zMax);
 
     // Scale for preview
+    int previewWidth = std::min(300, static_cast<int>(result.image.cols));
+    int previewHeight = std::min(300, static_cast<int>(result.image.rows));
+
     QPixmap pixmap = QPixmap::fromImage(img.scaled(
         previewWidth, previewHeight, Qt::KeepAspectRatio, Qt::SmoothTransformation));
 
     m_preview2D->setPixmap(pixmap);
+}
+
+// ── Graycast rendering (Sobel-based shaded relief) ──────────────────────────
+
+QImage STLImportDialog::renderGraycast(const ViffImage& img, float zMin, float zMax)
+{
+    // Sobel kernels for gradient computation
+    static constexpr int kx[3][3] = {{-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1}};
+    static constexpr int ky[3][3] = {{ 1, 2, 1}, { 0, 0, 0}, {-1,-2,-1}};
+
+    const int w = static_cast<int>(img.cols);
+    const int h = static_cast<int>(img.rows);
+
+    // Reference pixel size for gradient normalization
+    const float zRange = zMax - zMin;
+    const double refPxSize = (zRange > 0.0f)
+        ? (zRange / std::max(w, h))
+        : 1.0;
+
+    QImage result(w, h, QImage::Format_RGB32);
+
+    for (int r = 0; r < h; ++r) {
+        QRgb* line = reinterpret_cast<QRgb*>(result.scanLine(r));
+        for (int c = 0; c < w; ++c) {
+            size_t idx = static_cast<size_t>(r) * w + c;
+            float z = img.data[idx];
+
+            // Invalid pixel (no data)
+            if (z == 0.0f) {
+                line[c] = qRgb(0, 0, 0);
+                continue;
+            }
+
+            // 3×3 Sobel convolution
+            double gx = 0.0, gy = 0.0;
+            for (int dr = -1; dr <= 1; ++dr) {
+                for (int dc = -1; dc <= 1; ++dc) {
+                    int nr = std::clamp(r + dr, 0, h - 1);
+                    int nc = std::clamp(c + dc, 0, w - 1);
+                    size_t nidx = static_cast<size_t>(nr) * w + nc;
+                    double v = img.data[nidx];
+                    gx += kx[dr + 1][dc + 1] * v;
+                    gy += ky[dr + 1][dc + 1] * v;
+                }
+            }
+            gx /= (8.0 * refPxSize);
+            gy /= (8.0 * refPxSize);
+
+            // Lambertian shading with zenith light
+            const double theta = std::atan(std::sqrt(gx * gx + gy * gy));
+            const float cos_v = static_cast<float>(std::cos(theta));
+            // Invert: flat surfaces dark, steep slopes bright (dental convention)
+            int gray = (cos_v < 1.0f) ? static_cast<int>((1.0f - cos_v) * 255.0f) : 0;
+            // Alternative: int gray = static_cast<int>(cos_v * 255.0f);  // flat=bright
+
+            line[c] = qRgb(gray, gray, gray);
+        }
+    }
+
+    return result;
+}
+
+QImage STLImportDialog::renderLinear(const ViffImage& img, float zMin, float zMax)
+{
+    const int w = static_cast<int>(img.cols);
+    const int h = static_cast<int>(img.rows);
+    const float zRange = zMax - zMin;
+
+    QImage result(w, h, QImage::Format_RGB32);
+
+    for (int r = 0; r < h; ++r) {
+        QRgb* line = reinterpret_cast<QRgb*>(result.scanLine(r));
+        for (int c = 0; c < w; ++c) {
+            size_t idx = static_cast<size_t>(r) * w + c;
+            float z = img.data[idx];
+
+            uint8_t gray;
+            if (z == 0.0f) {  // No data
+                gray = 0;
+            } else if (zRange > 1e-6f) {
+                float norm = (z - zMin) / zRange;
+                gray = static_cast<uint8_t>(std::clamp(norm * 255.0f, 0.0f, 255.0f));
+            } else {
+                gray = 128;
+            }
+            line[c] = qRgb(gray, gray, gray);
+        }
+    }
+
+    return result;
 }
 
 void STLImportDialog::onImportClicked()

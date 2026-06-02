@@ -100,8 +100,8 @@ The import dialog has two main areas: a 3D preview on the left and a 2D projecti
 │                              │  2D Projection Preview      │
 │      3D Preview              │  ┌─────────────────────┐    │
 │                              │  │                     │    │
-│   [Interactive 3D View       │  │  [Grayscale         │    │
-│    with rotation]            │  │   heightmap]        │    │
+│   [Interactive 3D View       │  │  [Shaded relief     │    │
+│    with rotation]            │  │   preview]          │    │
 │                              │  │                     │    │
 │                              │  └─────────────────────┘    │
 │                              │  Size: 512 × 480 px         │
@@ -110,8 +110,9 @@ The import dialog has two main areas: a 3D preview on the left and a 2D projecti
 │  Quick Alignment        Fine Rotation        Projection    │
 │  [Top][Bottom]          X: [----●----]       Resolution:   │
 │  [Front][Back]          Y: [----●----]       [0.025] mm/px │
-│  [90X][90Y][90Z]        Z: [----●----]       [✓] Auto size │
-│  [Reset]                                                   │
+│  [90X][90Y][90Z]        Z: [----●----]       Copy from: ▼  │
+│  [Reset]                                     [✓] Auto size │
+│                                              [✓] Graycast  │
 ├────────────────────────────────────────────────────────────┤
 │  Mesh Info: Triangles: 125432, Size: 12.5 × 8.3 × 6.2 mm  │
 ├────────────────────────────────────────────────────────────┤
@@ -134,9 +135,11 @@ The mesh rotates around its center. The Z-axis (blue) indicates the projection d
 
 The right panel shows a preview of the resulting heightmap:
 
-- **Grayscale image**: Brighter = higher Z values
+- **Shaded image**: Uses Graycast shading by default (same as main application)
 - **Size**: Dimensions of the output image in pixels
 - **Coverage**: Percentage of pixels that contain valid data
+
+The preview uses **Graycast shading** (enabled by default) which shows surface topology through Sobel-based shaded relief rendering. This makes it easier to evaluate the orientation. You can disable Graycast via the checkbox to see a simple linear grayscale preview instead.
 
 ### Quick Alignment Buttons
 
@@ -166,9 +169,19 @@ The sliders update automatically when you rotate the mesh in the 3D view.
 | Setting | Description |
 |---------|-------------|
 | **Resolution** | Pixel size in mm/pixel (smaller = finer detail, larger image) |
+| **Copy from** | Copy resolution from an already-open image (for consistent pixel sizes) |
 | **Auto size** | Automatically calculate image dimensions from mesh bounds |
+| **Graycast shading** | Enable shaded relief preview (recommended for orientation) |
 
-Default resolution is 0.025 mm/pixel (25 µm), suitable for most dental applications.
+Default resolution is 0.025 mm/pixel (25 µm), suitable for most dental applications. This default can be changed in **Match → Parameters** (Global Parameters dialog).
+
+### Matching Resolution Across Scans
+
+When comparing scans from different scanners, it's important to use the same resolution:
+
+1. **Global setting**: Set your preferred resolution in **Match → Parameters** under "STL resolution". This becomes the default for all future imports.
+
+2. **Copy from open image**: If you have already imported one scan, the "Copy from" dropdown lets you match the resolution of any open image. This ensures both scans have identical pixel sizes for accurate comparison.
 
 ---
 

@@ -818,21 +818,30 @@ void MatchingControlPanel::onDiffImage() {
         .arg(t.alpha, 0, 'f', 4).arg(t.beta, 0, 'f', 4).arg(t.gamma, 0, 'f', 4)
         .arg(t.tx, 0, 'f', 4).arg(t.ty, 0, 'f', 4).arg(t.tz, 0, 'f', 4);
 
-    QDialog dlg(this);
-    dlg.setWindowTitle("Difference Image Statistics");
-    auto* layout = new QVBoxLayout(&dlg);
-    auto* edit = new QPlainTextEdit(statsText, &dlg);
+    // Pass target's ROI mask to the difference image window
+    // Open the diff image FIRST so user can see it immediately
+    const RoiMask* targetRoi = target->roiMask().isEmpty() ? nullptr : &target->roiMask();
+    if (openWindow_) openWindow_(std::move(diff), title, targetRoi);
+
+    // Show statistics in non-modal dialog (doesn't block further work)
+    auto* dlg = new QDialog(this);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    dlg->setWindowTitle("Difference Image Statistics");
+    auto* layout = new QVBoxLayout(dlg);
+    auto* edit = new QPlainTextEdit(statsText, dlg);
     edit->setReadOnly(true);
     edit->setFont(QFont("Courier", 10));
     edit->setMinimumSize(380, 300);
     layout->addWidget(edit);
-    auto* buttons = new QDialogButtonBox(&dlg);
+    auto* buttons = new QDialogButtonBox(dlg);
     auto* saveBtn = buttons->addButton("Save...", QDialogButtonBox::ActionRole);
     buttons->addButton(QDialogButtonBox::Close);
     layout->addWidget(buttons);
-    connect(saveBtn, &QPushButton::clicked, &dlg, [&]{
+
+    // Capture by value for independent lifetime
+    connect(saveBtn, &QPushButton::clicked, dlg, [dlg, title, statsText]{
         QString path = QFileDialog::getSaveFileName(
-            &dlg, "Save statistics", title + "_stats.txt",
+            dlg, "Save statistics", title + "_stats.txt",
             "Text files (*.txt);;All files (*)");
         if (path.isEmpty()) return;
         // Auto-append .txt if no extension present
@@ -842,14 +851,12 @@ void MatchingControlPanel::onDiffImage() {
         if (f.open(QIODevice::WriteOnly | QIODevice::Text))
             QTextStream(&f) << statsText;
         else
-            QMessageBox::warning(&dlg, "Save", "Cannot write file:\n" + path);
+            QMessageBox::warning(dlg, "Save", "Cannot write file:\n" + path);
     });
-    connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::accept);
-    dlg.exec();
+    connect(buttons, &QDialogButtonBox::rejected, dlg, &QDialog::close);
 
-    // Pass target's ROI mask to the difference image window
-    const RoiMask* targetRoi = target->roiMask().isEmpty() ? nullptr : &target->roiMask();
-    if (openWindow_) openWindow_(std::move(diff), title, targetRoi);
+    // Show non-modal (focus returns to main window)
+    dlg->show();
 }
 
 void MatchingControlPanel::onCompleted() {

@@ -230,7 +230,7 @@ STL File → STLImportDialog → Interactive 3D Orientation → Z-Projection →
    - Includes winding correction (Primescan compatibility)
 
 2. **STLPreviewWidget** (`visualization3d/STLPreviewWidget.cpp`)
-   - VTK-based 3D preview
+   - VTK-based 3D preview with Phong shading
    - Object rotation (not camera!) via vtkInteractorStyleTrackballActor
    - XY reference grid for orientation
    - Axes widget (RGB = XYZ)
@@ -242,9 +242,32 @@ STL File → STLImportDialog → Interactive 3D Orientation → Z-Projection →
 
 4. **STLImportDialog** (`dialogs/STLImportDialog.cpp`)
    - 3D preview (left) + 2D projection preview (right)
+   - 2D preview supports Graycast shading (Sobel-based, toggleable)
    - Quick alignment buttons (Top, Bottom, 90X, 90Y, 90Z, Reset)
    - Fine rotation sliders (X, Y, Z)
-   - Resolution setting (mm/pixel)
+   - Resolution setting with global default from `AppSettings::stlResolution`
+   - "Copy from" combo to match resolution of open images
+
+### Resolution Management
+
+For comparing scans from different scanners, consistent resolution is critical:
+
+```cpp
+// STLImportDialog constructor accepts settings and open images
+STLImportDialog(const QString& filePath,
+                AppSettings* settings,              // Global resolution default
+                const std::vector<OpenImageInfo>& openImages,  // For "copy from"
+                QWidget* parent);
+
+// OpenImageInfo struct
+struct OpenImageInfo {
+    QString name;
+    float xPixelSize;  // metres per pixel
+    float yPixelSize;
+};
+```
+
+The used resolution is saved back to `AppSettings::stlResolution` after import.
 
 ### Conditional Compilation
 
@@ -323,6 +346,23 @@ vtk_module_autoinit(TARGETS myapp MODULES ${VTK_LIBRARIES})
 ```
 
 Without this, VTK rendering may fail silently.
+
+### Non-Modal Dialogs
+
+For dialogs that should allow continued interaction with other windows:
+```cpp
+// CORRECT - Non-modal dialog
+auto* dlg = new QDialog(this);
+dlg->setAttribute(Qt::WA_DeleteOnClose);
+// ... setup dialog ...
+dlg->show();  // Returns immediately
+
+// WRONG - Modal dialog blocks all interaction
+QDialog dlg(this);
+dlg.exec();  // Blocks until closed
+```
+
+Used for: Statistics, Histogram, and Diff Image statistics dialogs.
 
 ---
 
@@ -426,6 +466,16 @@ Generates wear samples for testing surface fitting:
 - Z-buffer projection to 2D heightmap
 - Quick alignment buttons (Top, Bottom, 90X, etc.)
 - Conditional compilation via `MATCH3D_ENABLE_STL_IMPORT`
+- Graycast shading in 2D projection preview (toggleable)
+- Resolution management: global default + "Copy from" open images
+- Fixed quick alignment button i18n comparison
+
+### 2026-06-02 – Non-Modal Dialogs
+
+- Statistics dialog now non-modal (multiple windows allowed)
+- Histogram dialog now non-modal
+- Diff Image workflow: opens image first, then shows non-modal statistics
+- Pattern: use `show()` instead of `exec()`, set `Qt::WA_DeleteOnClose`
 
 ### 2026-06-01 – Linear2 Display Style
 

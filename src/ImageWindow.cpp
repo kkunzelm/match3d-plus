@@ -210,24 +210,27 @@ void ImageWindow::showStatisticsDialog() {
     const QString label = QFileInfo(path_).fileName();
     const QString text  = ImageProcessor::formatStats(s, label);
 
-    QDialog dlg(this);
-    dlg.setWindowTitle("Statistics — " + label);
-    auto* layout = new QVBoxLayout(&dlg);
+    // Create non-modal dialog (on heap, auto-deleted on close)
+    auto* dlg = new QDialog(this);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    dlg->setWindowTitle("Statistics — " + label);
+    auto* layout = new QVBoxLayout(dlg);
 
-    auto* edit = new QPlainTextEdit(text, &dlg);
+    auto* edit = new QPlainTextEdit(text, dlg);
     edit->setReadOnly(true);
     edit->setFont(QFont("Courier", 10));
     edit->setMinimumSize(380, 300);
     layout->addWidget(edit);
 
-    auto* buttons = new QDialogButtonBox(&dlg);
+    auto* buttons = new QDialogButtonBox(dlg);
     auto* saveBtn = buttons->addButton("Save...", QDialogButtonBox::ActionRole);
     buttons->addButton(QDialogButtonBox::Close);
     layout->addWidget(buttons);
 
-    connect(saveBtn, &QPushButton::clicked, &dlg, [&]{
+    // Capture text by value for lambda (dlg lifetime independent)
+    connect(saveBtn, &QPushButton::clicked, dlg, [dlg, label, text]{
         QString path = QFileDialog::getSaveFileName(
-            &dlg, "Save statistics", label + "_stats.txt",
+            dlg, "Save statistics", label + "_stats.txt",
             "Text files (*.txt);;All files (*)");
         if (path.isEmpty()) return;
         // Auto-append .txt if no extension present
@@ -237,19 +240,22 @@ void ImageWindow::showStatisticsDialog() {
         if (f.open(QIODevice::WriteOnly | QIODevice::Text))
             QTextStream(&f) << text;
         else
-            QMessageBox::warning(&dlg, "Save", "Cannot write file:\n" + path);
+            QMessageBox::warning(dlg, "Save", "Cannot write file:\n" + path);
     });
-    connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, dlg, &QDialog::close);
 
-    dlg.exec();
+    // Show non-modal (doesn't block)
+    dlg->show();
 }
 
 void ImageWindow::showHistogramDialog() {
-    HistogramDialog dlg(image_, &roiMask_, depthView_,
+    // Create non-modal histogram dialog (on heap, auto-deleted on close)
+    auto* dlg = new HistogramDialog(image_, &roiMask_, depthView_,
         [this](float zMin, float zMax){
             applyRoiOp([this, zMin, zMax](RoiMask& m){ m.clipToZRange(image_, zMin, zMax); });
         }, this);
-    dlg.exec();
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    dlg->show();
 }
 
 void ImageWindow::showFitPlaneDialog() {
