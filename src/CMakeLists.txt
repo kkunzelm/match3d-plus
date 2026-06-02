@@ -15,11 +15,13 @@ if(MATCH3D_ENABLE_STL_IMPORT)
         find_package(Eigen3 3.4 REQUIRED CONFIG)
     endif()
 
-    # Mesh3D Core: STL reading, mesh data structures, projection
+    # Mesh3D Core: mesh reading (STL, PLY, OBJ), data structures, projection
     add_library(mesh3d_core STATIC
         mesh3d/MeshData.h
         mesh3d/STLReader.h
         mesh3d/STLReader.cpp
+        mesh3d/MeshReader.h
+        mesh3d/MeshReader.cpp
         mesh3d/MeshProjection.h
         mesh3d/MeshProjection.cpp
     )

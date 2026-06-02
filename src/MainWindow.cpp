@@ -91,8 +91,8 @@ void MainWindow::createActions() {
     connect(actOpenPly_, &QAction::triggered, this, &MainWindow::onOpenPly);
 
 #ifdef MATCH3D_STL_IMPORT_ENABLED
-    actOpenStl_ = new QAction("Open &STL...", this);
-    connect(actOpenStl_, &QAction::triggered, this, &MainWindow::onOpenStl);
+    actOpenMesh_ = new QAction("Import 3D &Mesh...", this);
+    connect(actOpenMesh_, &QAction::triggered, this, &MainWindow::onOpenMesh);
 #endif
 
     actCloseAll_ = new QAction("Close all", this);
@@ -126,7 +126,7 @@ void MainWindow::createMenus() {
     fileMenu->addAction(actOpenViff_);
     fileMenu->addAction(actOpenPly_);
 #ifdef MATCH3D_STL_IMPORT_ENABLED
-    fileMenu->addAction(actOpenStl_);
+    fileMenu->addAction(actOpenMesh_);
 #endif
     fileMenu->addSeparator();
     fileMenu->addAction(actCloseAll_);
@@ -405,10 +405,10 @@ QVector<ImageWindow*> MainWindow::selectedPair() const {
 }
 
 #ifdef MATCH3D_STL_IMPORT_ENABLED
-void MainWindow::onOpenStl() {
+void MainWindow::onOpenMesh() {
     const QString path = QFileDialog::getOpenFileName(
-        this, tr("Open STL"), lastDir_,
-        tr("STL Files (*.stl);;All Files (*)"));
+        this, tr("Import 3D Mesh"), lastDir_,
+        tr("3D Mesh Files (*.stl *.ply *.obj);;STL Files (*.stl);;PLY Files (*.ply);;OBJ Files (*.obj);;All Files (*)"));
 
     if (path.isEmpty()) return;
 

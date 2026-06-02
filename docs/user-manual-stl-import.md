@@ -1,6 +1,6 @@
-# Match3D+: STL Import User Manual
+# Match3D+: 3D Mesh Import User Manual
 
-This guide explains how to import STL files from intraoral scanners and convert them to 2.5D heightmaps for analysis in Match3D+.
+This guide explains how to import 3D mesh files (STL, PLY, OBJ) from intraoral scanners and convert them to 2.5D heightmaps for analysis in Match3D+.
 
 ## Table of Contents
 
@@ -21,13 +21,12 @@ This guide explains how to import STL files from intraoral scanners and convert 
 
 ## Overview
 
-Match3D+ can import 3D mesh data from STL files (commonly exported by intraoral scanners) and project them onto 2D heightmaps for analysis with the existing registration and difference calculation tools.
+Match3D+ can import 3D mesh data from STL, PLY, and OBJ files (commonly exported by intraoral scanners and 3D modeling software) and project them onto 2D heightmaps for analysis with the existing registration and difference calculation tools.
 
 ```
 ┌─────────────────┐
-│   STL File      │
-│  (3D Triangle   │
-│     Mesh)       │
+│   Mesh File     │
+│ (STL/PLY/OBJ)   │
 └────────┬────────┘
          │
          ▼
@@ -65,8 +64,8 @@ Match3D+ can import 3D mesh data from STL files (commonly exported by intraoral 
 
 ## Quick Start
 
-1. Go to **File → Import STL...**
-2. Select an STL file from your intraoral scanner
+1. Go to **File → Import 3D Mesh...**
+2. Select a mesh file (STL, PLY, or OBJ) from your scanner
 3. Use the 3D preview to rotate the tooth so the occlusal surface faces up
 4. Adjust resolution if needed (default: 0.025 mm/pixel)
 5. Click **Import** to create the heightmap
@@ -74,18 +73,23 @@ Match3D+ can import 3D mesh data from STL files (commonly exported by intraoral 
 
 ---
 
-## Opening STL Files
+## Opening Mesh Files
 
 ### Supported Formats
 
-- **Binary STL**: Standard format exported by most scanners (recommended)
-- **ASCII STL**: Text-based format (also supported, but larger file sizes)
+| Format | Extension | Description |
+|--------|-----------|-------------|
+| **STL** | .stl | Standard triangulation format, exported by most scanners |
+| **PLY** | .ply | Polygon File Format, supports vertex colors and properties |
+| **OBJ** | .obj | Wavefront OBJ, common 3D model exchange format |
+
+**Note:** The existing "Open PLY" menu option is for point cloud data from triangulation scanners. Use "Import 3D Mesh..." for PLY files with face data.
 
 ### How to Import
 
-1. Select **File → Import STL...** from the menu
-2. Browse to your STL file and click **Open**
-3. The STL Import Dialog opens with the 3D preview
+1. Select **File → Import 3D Mesh...** from the menu
+2. Browse to your mesh file (STL, PLY, or OBJ) and click **Open**
+3. The Mesh Import Dialog opens with the 3D preview
 
 ---
 

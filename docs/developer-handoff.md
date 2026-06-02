@@ -224,11 +224,15 @@ STL File → STLImportDialog → Interactive 3D Orientation → Z-Projection →
 
 ### Key Components
 
-1. **STLReader** (`mesh3d/STLReader.cpp`)
+1. **MeshReader** (`mesh3d/MeshReader.cpp`)
+   - Unified reader for STL, PLY, and OBJ mesh files
+   - Auto-detects format from file extension
+   - Uses CGAL for PLY/OBJ, custom reader for binary STL
+   - All meshes auto-centered at origin for intuitive rotation
+
+   **STLReader** (`mesh3d/STLReader.cpp`)
    - Reads binary STL files
-   - Converts to CGAL SurfaceMesh
    - Includes winding correction (Primescan compatibility)
-   - Auto-centers mesh at origin (bounding box center → origin)
 
 2. **STLPreviewWidget** (`visualization3d/STLPreviewWidget.cpp`)
    - VTK-based 3D preview with Phong shading
@@ -512,6 +516,13 @@ Generates wear samples for testing surface fitting:
 ---
 
 ## Changelog (Recent)
+
+### 2026-06-02 – PLY and OBJ Mesh Import
+
+- Extended mesh import to support PLY and OBJ files (in addition to STL)
+- New unified `MeshReader` with auto-detection from file extension
+- Menu changed from "Open STL" to "Import 3D Mesh..." with multi-format filter
+- Existing PLY point cloud import (for triangulation scanner data) unchanged
 
 ### 2026-06-02 – Difference Image Display
 

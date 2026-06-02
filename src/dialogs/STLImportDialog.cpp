@@ -1,6 +1,6 @@
 #include "STLImportDialog.h"
 #include "visualization3d/STLPreviewWidget.h"
-#include "mesh3d/STLReader.h"
+#include "mesh3d/MeshReader.h"
 #include "mesh3d/MeshProjection.h"
 #include "../AppSettings.h"
 
@@ -35,7 +35,7 @@ STLImportDialog::STLImportDialog(const QString& filePath,
     , m_settings(settings)
     , m_openImages(openImages)
 {
-    setWindowTitle(tr("Import STL: %1").arg(QFileInfo(filePath).fileName()));
+    setWindowTitle(tr("Import 3D Mesh: %1").arg(QFileInfo(filePath).fileName()));
     setMinimumSize(1000, 700);
     resize(1200, 800);
 
@@ -270,7 +270,7 @@ void STLImportDialog::setupUI()
 void STLImportDialog::loadSTL()
 {
     std::string errorMsg;
-    m_mesh = mesh3d::readSTL(m_filePath.toStdString(), errorMsg);
+    m_mesh = mesh3d::readMesh(m_filePath.toStdString(), errorMsg);
 
     if (!m_mesh || !m_mesh->isValid()) {
         m_meshInfo->setText(tr("Error: %1").arg(QString::fromStdString(errorMsg)));

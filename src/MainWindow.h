@@ -60,7 +60,7 @@ private slots:
     void onOpenViff();
     void onOpenPly();
 #ifdef MATCH3D_STL_IMPORT_ENABLED
-    void onOpenStl();
+    void onOpenMesh();
 #endif
     void onCloseAll();
     void onGlobalParameters();
@@ -101,7 +101,7 @@ private:
     QAction* actOpenViff_          = nullptr;
     QAction* actOpenPly_           = nullptr;
 #ifdef MATCH3D_STL_IMPORT_ENABLED
-    QAction* actOpenStl_           = nullptr;
+    QAction* actOpenMesh_          = nullptr;
 #endif
     QAction* actCloseAll_          = nullptr;
     QAction* actQuit_              = nullptr;
