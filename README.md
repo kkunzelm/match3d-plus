@@ -7,6 +7,7 @@ A Qt6/C++20 application for comparing 3D surface scans by aligning them and comp
 Match3D+ enables researchers to:
 
 - **Load and visualize** 2.5D depth images (heightmaps) from laser scanners
+- **Import STL files** from intraoral scanners with interactive 3D orientation
 - **Register (align)** two surfaces using various ICP algorithms
 - **Compute difference images** showing surface changes between scans
 - **Fit geometric primitives** (planes, spheres) to isolate and measure wear
@@ -40,12 +41,18 @@ For specimens with known geometry:
 
 ## Dependencies
 
+### Core Dependencies
 - **Qt 6.4+** (Widgets, Concurrent modules)
 - **CMake 3.20+**
 - **C++20 compatible compiler** (GCC 11+, Clang 13+, MSVC 2019+)
 - **CCCoreLib** (included as git submodule) - Point cloud library from CloudCompare
 - **happly** (included) - PLY file I/O header-only library
 - **nanoflann** (included) - KD-tree header-only library for nearest neighbor search
+
+### STL Import Feature (optional)
+- **VTK 9.3+** - 3D visualization and rendering
+- **CGAL 6.0+** - Computational geometry library (header-only mode)
+- **Eigen 3.4+** - Linear algebra library for transformations
 
 ## Building
 
@@ -68,6 +75,24 @@ git submodule update --init --recursive
 mkdir build && cd build
 cmake ..
 make -j$(nproc)
+```
+
+### Build Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `MATCH3D_ENABLE_STL_IMPORT` | ON | Enable STL file import with 3D preview |
+
+To disable STL import (if VTK/CGAL/Eigen are not available):
+
+```bash
+cmake -DMATCH3D_ENABLE_STL_IMPORT=OFF ..
+```
+
+To specify custom VTK installation path:
+
+```bash
+cmake -DVTK_DIR=/path/to/vtk/lib/cmake/vtk-9.3 ..
 ```
 
 ### Run
@@ -104,6 +129,7 @@ Detailed documentation is available in the `docs/` directory:
 
 | Document | Description |
 |----------|-------------|
+| [User Manual: STL Import](docs/user-manual-stl-import.md) | Importing STL files from intraoral scanners |
 | [User Manual: Registration](docs/user-manual-registration.md) | Complete guide to surface alignment |
 | [User Manual: ROI, Histogram, Statistics](docs/user-manual-roi-histogram-statistics.md) | Selection tools and data analysis |
 | [User Manual: Surface Fitting](docs/user-manual-surface-fitting.md) | Plane and sphere fitting workflows |
