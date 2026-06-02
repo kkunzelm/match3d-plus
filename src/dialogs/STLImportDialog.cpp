@@ -152,7 +152,7 @@ void STLImportDialog::setupUI()
         for (const auto& img : m_openImages) {
             // Show resolution as average of x and y pixel sizes
             float avgRes = (img.xPixelSize + img.yPixelSize) / 2.0f * 1000.0f;  // Convert m to mm
-            m_comboResFrom->addItem(tr("%1 (%.3f mm/px)")
+            m_comboResFrom->addItem(tr("%1 (%2 mm/px)")
                 .arg(img.name)
                 .arg(static_cast<double>(avgRes), 0, 'f', 3));
         }
@@ -233,7 +233,7 @@ void STLImportDialog::updateMeshInfo()
 
     auto dims = m_mesh->dimensions();
     QString info = tr("Triangles: %1\nVertices: %2\n"
-                      "Size: %.2f × %.2f × %.2f mm")
+                      "Size: %3 × %4 × %5 mm")
         .arg(m_mesh->triangleCount)
         .arg(m_mesh->vertexCount)
         .arg(dims[0], 0, 'f', 2)

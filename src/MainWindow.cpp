@@ -410,6 +410,7 @@ void MainWindow::onOpenStl() {
     // Collect info about open images for "copy resolution from" feature
     std::vector<OpenImageInfo> openImgInfos;
     for (const auto* w : imageWindows_) {
+        if (!w) continue;  // Skip closed windows (nullptr entries)
         OpenImageInfo info;
         info.name = QFileInfo(w->imagePath()).fileName();
         info.xPixelSize = w->image().xPixelSize;
