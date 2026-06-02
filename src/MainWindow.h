@@ -59,6 +59,9 @@ protected:
 private slots:
     void onOpenViff();
     void onOpenPly();
+#ifdef MATCH3D_STL_IMPORT_ENABLED
+    void onOpenStl();
+#endif
     void onCloseAll();
     void onGlobalParameters();
     void onAbout();
@@ -97,6 +100,9 @@ private:
     // Actions
     QAction* actOpenViff_          = nullptr;
     QAction* actOpenPly_           = nullptr;
+#ifdef MATCH3D_STL_IMPORT_ENABLED
+    QAction* actOpenStl_           = nullptr;
+#endif
     QAction* actCloseAll_          = nullptr;
     QAction* actQuit_              = nullptr;
     QAction* actGlobalParams_      = nullptr;

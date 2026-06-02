@@ -23,6 +23,10 @@
 #include "io/PlyIO.h"
 #include "io/ViffReader.h"
 
+#ifdef MATCH3D_STL_IMPORT_ENABLED
+#include "dialogs/STLImportDialog.h"
+#endif
+
 #include <QAction>
 #include <QCloseEvent>
 #include <QDialog>
@@ -85,6 +89,11 @@ void MainWindow::createActions() {
     actOpenPly_ = new QAction("Open &PLY", this);
     connect(actOpenPly_, &QAction::triggered, this, &MainWindow::onOpenPly);
 
+#ifdef MATCH3D_STL_IMPORT_ENABLED
+    actOpenStl_ = new QAction("Open &STL...", this);
+    connect(actOpenStl_, &QAction::triggered, this, &MainWindow::onOpenStl);
+#endif
+
     actCloseAll_ = new QAction("Close all", this);
     connect(actCloseAll_, &QAction::triggered, this, &MainWindow::onCloseAll);
 
@@ -115,6 +124,9 @@ void MainWindow::createMenus() {
     auto* fileMenu = menuBar()->addMenu("&File");
     fileMenu->addAction(actOpenViff_);
     fileMenu->addAction(actOpenPly_);
+#ifdef MATCH3D_STL_IMPORT_ENABLED
+    fileMenu->addAction(actOpenStl_);
+#endif
     fileMenu->addSeparator();
     fileMenu->addAction(actCloseAll_);
     fileMenu->addSeparator();
@@ -384,3 +396,22 @@ QVector<ImageWindow*> MainWindow::selectedPair() const {
         return {w1, w2};
     return imageWindows();  // fallback: both lists need a selection
 }
+
+#ifdef MATCH3D_STL_IMPORT_ENABLED
+void MainWindow::onOpenStl() {
+    const QString path = QFileDialog::getOpenFileName(
+        this, tr("Open STL"), lastDir_,
+        tr("STL Files (*.stl);;All Files (*)"));
+
+    if (path.isEmpty()) return;
+
+    lastDir_ = QFileInfo(path).absolutePath();
+
+    STLImportDialog dlg(path, this);
+    if (dlg.exec() == QDialog::Accepted && dlg.isValid()) {
+        ViffImage img = dlg.getProjectedImage();
+        QString title = QFileInfo(path).fileName() + " (projected)";
+        openImageWindow(std::move(img), title);
+    }
+}
+#endif
