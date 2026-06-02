@@ -6,6 +6,7 @@
 #include <vtkActor.h>
 #include <vtkAxesActor.h>
 #include <vtkCamera.h>
+#include <vtkCallbackCommand.h>
 #include <vtkCellArray.h>
 #include <vtkGenericOpenGLRenderWindow.h>
 #include <vtkInteractorStyleTrackballActor.h>
@@ -23,6 +24,27 @@
 #include <vtkTransformPolyDataFilter.h>
 
 #include <cmath>
+
+// Callback for interaction events
+namespace {
+    void onInteractionStart(vtkObject*, unsigned long, void* clientData, void*) {
+        auto* widget = static_cast<STLPreviewWidget*>(clientData);
+        emit widget->interactionStarted();
+    }
+
+    void onInteractionEnd(vtkObject*, unsigned long, void* clientData, void*) {
+        auto* widget = static_cast<STLPreviewWidget*>(clientData);
+        // Sync actor orientation to our transform before signaling end
+        widget->syncActorRotation();
+        emit widget->interactionEnded();
+    }
+
+    void onInteraction(vtkObject*, unsigned long, void* clientData, void*) {
+        auto* widget = static_cast<STLPreviewWidget*>(clientData);
+        // Sync rotation during interaction for real-time updates
+        widget->syncActorRotation();
+    }
+}
 
 // ── Constructor / Destructor ─────────────────────────────────────────────────
 
@@ -76,14 +98,29 @@ void STLPreviewWidget::setupVTK()
     vtkNew<vtkInteractorStyleTrackballActor> style;
     m_vtkWidget->interactor()->SetInteractorStyle(style);
 
+    // Setup interaction callbacks
+    vtkNew<vtkCallbackCommand> startCallback;
+    startCallback->SetCallback(onInteractionStart);
+    startCallback->SetClientData(this);
+    m_vtkWidget->interactor()->AddObserver(vtkCommand::StartInteractionEvent, startCallback);
+
+    vtkNew<vtkCallbackCommand> endCallback;
+    endCallback->SetCallback(onInteractionEnd);
+    endCallback->SetClientData(this);
+    m_vtkWidget->interactor()->AddObserver(vtkCommand::EndInteractionEvent, endCallback);
+
+    // Observer for during-interaction updates (real-time sync)
+    vtkNew<vtkCallbackCommand> interactionCallback;
+    interactionCallback->SetCallback(onInteraction);
+    interactionCallback->SetClientData(this);
+    m_vtkWidget->interactor()->AddObserver(vtkCommand::InteractionEvent, interactionCallback);
+
     // Setup reference grid and axes
     setupReferenceGrid();
     setupAxesWidget();
 
     // Initial camera position (looking down Z axis)
-    m_renderer->GetActiveCamera()->SetPosition(0, 0, 100);
-    m_renderer->GetActiveCamera()->SetFocalPoint(0, 0, 0);
-    m_renderer->GetActiveCamera()->SetViewUp(0, 1, 0);
+    applyCameraView();
 }
 
 void STLPreviewWidget::setupReferenceGrid()
@@ -106,6 +143,7 @@ void STLPreviewWidget::setupReferenceGrid()
     m_gridActor->GetProperty()->SetColor(0.5, 0.5, 0.5);
     m_gridActor->GetProperty()->SetOpacity(0.3);
     m_gridActor->GetProperty()->SetLineWidth(1.0);
+    m_gridActor->PickableOff();  // Prevent interaction - grid stays fixed
 
     m_renderer->AddActor(m_gridActor);
 }
@@ -337,4 +375,132 @@ void STLPreviewWidget::resizeEvent(QResizeEvent* event)
 void STLPreviewWidget::emitTransformChanged()
 {
     emit transformChanged(getObjectTransform());
+}
+
+// ── Camera View Control ──────────────────────────────────────────────────────
+
+void STLPreviewWidget::setCameraView(CameraView view)
+{
+    m_cameraView = view;
+    applyCameraView();
+    if (m_mesh) {
+        centerMesh();
+    }
+}
+
+void STLPreviewWidget::applyCameraView()
+{
+    if (!m_renderer) return;
+
+    vtkCamera* cam = m_renderer->GetActiveCamera();
+
+    switch (m_cameraView) {
+    case CameraView::Free:
+    case CameraView::XY:
+        // Looking down Z axis (XY plane in screen) - default top view
+        cam->SetPosition(0, 0, 100);
+        cam->SetFocalPoint(0, 0, 0);
+        cam->SetViewUp(0, 1, 0);
+        break;
+
+    case CameraView::YZ:
+        // Looking along X axis (YZ plane in screen) - side view
+        cam->SetPosition(100, 0, 0);
+        cam->SetFocalPoint(0, 0, 0);
+        cam->SetViewUp(0, 0, 1);
+        break;
+
+    case CameraView::XZ:
+        // Looking along Y axis (XZ plane in screen) - front view
+        cam->SetPosition(0, -100, 0);
+        cam->SetFocalPoint(0, 0, 0);
+        cam->SetViewUp(0, 0, 1);
+        break;
+    }
+
+    if (m_vtkWidget && m_vtkWidget->renderWindow()) {
+        m_vtkWidget->renderWindow()->Render();
+    }
+}
+
+void STLPreviewWidget::setObjectTransform(double rx, double ry, double rz)
+{
+    // Apply transform without emitting signal (to avoid feedback loops)
+    m_rotX = rx;
+    m_rotY = ry;
+    m_rotZ = rz;
+
+    m_objectTransform->Identity();
+    m_objectTransform->RotateZ(rz);
+    m_objectTransform->RotateY(ry);
+    m_objectTransform->RotateX(rx);
+
+    updateMeshActor();
+    if (m_vtkWidget && m_vtkWidget->renderWindow()) {
+        m_vtkWidget->renderWindow()->Render();
+    }
+}
+
+void STLPreviewWidget::setInteractive(bool interactive)
+{
+    if (m_vtkWidget && m_vtkWidget->interactor()) {
+        if (interactive) {
+            m_vtkWidget->interactor()->EnableRenderOn();
+        } else {
+            // Disable interaction by using a null style or restricted style
+            // For now, we still allow zoom/pan but keep the view direction
+        }
+    }
+}
+
+void STLPreviewWidget::syncActorRotation()
+{
+    if (!m_meshActor) return;
+
+    // Get the actor's current orientation (set by trackball interaction)
+    double* actorOrientation = m_meshActor->GetOrientation();  // Returns [rx, ry, rz] in degrees
+
+    // Only sync if there's actual rotation from the actor
+    if (std::abs(actorOrientation[0]) < 0.01 &&
+        std::abs(actorOrientation[1]) < 0.01 &&
+        std::abs(actorOrientation[2]) < 0.01) {
+        return;  // No significant rotation to sync
+    }
+
+    // Combine actor rotation with our current rotation
+    // The actor orientation is applied after our transform, so we need to compose them
+    double newRotX = m_rotX + actorOrientation[0];
+    double newRotY = m_rotY + actorOrientation[1];
+    double newRotZ = m_rotZ + actorOrientation[2];
+
+    // Normalize angles to [-180, 180]
+    auto normalize = [](double angle) {
+        while (angle > 180.0) angle -= 360.0;
+        while (angle < -180.0) angle += 360.0;
+        return angle;
+    };
+    newRotX = normalize(newRotX);
+    newRotY = normalize(newRotY);
+    newRotZ = normalize(newRotZ);
+
+    // Reset the actor's orientation (we'll apply everything through m_objectTransform)
+    m_meshActor->SetOrientation(0, 0, 0);
+    m_meshActor->SetPosition(0, 0, 0);
+
+    // Update our internal state
+    m_rotX = newRotX;
+    m_rotY = newRotY;
+    m_rotZ = newRotZ;
+
+    // Update m_objectTransform with the new combined rotation
+    m_objectTransform->Identity();
+    m_objectTransform->RotateZ(m_rotZ);
+    m_objectTransform->RotateY(m_rotY);
+    m_objectTransform->RotateX(m_rotX);
+
+    // Update the mesh to reflect the new transform
+    updateMeshActor();
+
+    // Emit signal so other views can sync
+    emitTransformChanged();
 }

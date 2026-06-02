@@ -228,12 +228,15 @@ STL File → STLImportDialog → Interactive 3D Orientation → Z-Projection →
    - Reads binary STL files
    - Converts to CGAL SurfaceMesh
    - Includes winding correction (Primescan compatibility)
+   - Auto-centers mesh at origin (bounding box center → origin)
 
 2. **STLPreviewWidget** (`visualization3d/STLPreviewWidget.cpp`)
    - VTK-based 3D preview with Phong shading
    - Object rotation (not camera!) via vtkInteractorStyleTrackballActor
-   - XY reference grid for orientation
+   - XY reference grid for orientation (non-pickable, stays fixed)
    - Axes widget (RGB = XYZ)
+   - Support for fixed camera views (XY, YZ, XZ planes)
+   - Signals for interaction start/end (used for auto-update timing)
 
 3. **MeshProjection** (`mesh3d/MeshProjection.cpp`)
    - Projects transformed mesh to 2D heightmap
@@ -241,8 +244,14 @@ STL File → STLImportDialog → Interactive 3D Orientation → Z-Projection →
    - Barycentric triangle rasterization
 
 4. **STLImportDialog** (`dialogs/STLImportDialog.cpp`)
-   - 3D preview (left) + 2D projection preview (right)
+   - Four-view layout in 2×2 grid:
+     - Top-left: Free 3D preview (interactive rotation)
+     - Top-right: YZ plane view (camera along X axis)
+     - Bottom-left: XZ plane view (camera along Y axis)
+     - Bottom-right: 2D projection preview
+   - All three 3D views are synchronized (rotation in any view updates all)
    - 2D preview supports Graycast shading (Sobel-based, toggleable)
+   - 2D preview auto-updates after 500ms idle, or via "Update Preview" button
    - Quick alignment buttons (Top, Bottom, 90X, 90Y, 90Z, Reset)
    - Fine rotation sliders (X, Y, Z)
    - Resolution setting with global default from `AppSettings::stlResolution`
@@ -503,6 +512,24 @@ Generates wear samples for testing surface fitting:
 ---
 
 ## Changelog (Recent)
+
+### 2026-06-02 – Difference Image Display
+
+- Difference images now default to FalseColor display style
+- Applies to: registration diff, plane subtraction, sphere subtraction
+- Auto-detected diff images (with negative values) also use FalseColor
+
+### 2026-06-02 – STL Import Four-View Layout
+
+- Redesigned STL Import dialog with four-view layout (2×2 grid)
+- Three synchronized 3D views: free rotation, YZ plane, XZ plane
+- Mouse rotation in any 3D view now syncs to all views (via `syncActorRotation()`)
+- Fixed reference grid (non-pickable) so only mesh can be rotated
+- 2D projection preview with "Update Preview" button
+- Auto-update after 500ms idle (no interaction)
+- CameraView enum for fixed orthographic views
+- STL mesh auto-centered at origin for intuitive rotation
+- Fixed Graycast formula to match main application (flat=bright, steep=dark)
 
 ### 2026-06-02 – STL Import Feature
 

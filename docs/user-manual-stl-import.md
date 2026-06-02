@@ -91,53 +91,73 @@ Match3D+ can import 3D mesh data from STL files (commonly exported by intraoral 
 
 ## The Import Dialog
 
-The import dialog has two main areas: a 3D preview on the left and a 2D projection preview on the right.
+The import dialog uses a **four-view layout** with three synchronized 3D views and a 2D projection preview.
 
 ```
-┌────────────────────────────────────────────────────────────┐
-│  Import STL: tooth_scan.stl                            [X] │
-├──────────────────────────────┬─────────────────────────────┤
-│                              │  2D Projection Preview      │
-│      3D Preview              │  ┌─────────────────────┐    │
-│                              │  │                     │    │
-│   [Interactive 3D View       │  │  [Shaded relief     │    │
-│    with rotation]            │  │   preview]          │    │
-│                              │  │                     │    │
-│                              │  └─────────────────────┘    │
-│                              │  Size: 512 × 480 px         │
-│                              │  Coverage: 87.3%            │
-├──────────────────────────────┴─────────────────────────────┤
-│  Quick Alignment        Fine Rotation        Projection    │
-│  [Top][Bottom]          X: [----●----]       Resolution:   │
-│  [Front][Back]          Y: [----●----]       [0.025] mm/px │
-│  [90X][90Y][90Z]        Z: [----●----]       Copy from: ▼  │
-│  [Reset]                                     [✓] Auto size │
-│                                              [✓] Graycast  │
-├────────────────────────────────────────────────────────────┤
-│  Mesh Info: Triangles: 125432, Size: 12.5 × 8.3 × 6.2 mm  │
-├────────────────────────────────────────────────────────────┤
-│                                    [Cancel]    [Import]    │
-└────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│  Import STL: tooth_scan.stl                                     [X] │
+├─────────────────────────────────┬───────────────────────────────────┤
+│  3D Preview (Free)              │  YZ Plane (Side)                  │
+│  ┌───────────────────────────┐  │  ┌─────────────────────────────┐  │
+│  │                           │  │  │                             │  │
+│  │   [Interactive rotation]  │  │  │   [Camera along X axis]     │  │
+│  │                           │  │  │                             │  │
+│  └───────────────────────────┘  │  └─────────────────────────────┘  │
+├─────────────────────────────────┼───────────────────────────────────┤
+│  XZ Plane (Front)               │  2D Projection Preview            │
+│  ┌───────────────────────────┐  │  ┌─────────────────────────────┐  │
+│  │                           │  │  │                             │  │
+│  │   [Camera along Y axis]   │  │  │   [Shaded relief preview]   │  │
+│  │                           │  │  │                             │  │
+│  └───────────────────────────┘  │  └─────────────────────────────┘  │
+│                                 │  [Update Preview]                 │
+│                                 │  Size: 512 × 480 px | 87.3%       │
+├─────────────────────────────────┴───────────────────────────────────┤
+│  Quick Alignment        Fine Rotation        Projection             │
+│  [Top][Bottom]          X: [----●----]       Resolution:            │
+│  [Front][Back]          Y: [----●----]       [0.025] mm/px          │
+│  [90X][90Y][90Z]        Z: [----●----]       Copy from: ▼           │
+│  [Reset]                                     [✓] Auto size          │
+│                                              [✓] Graycast           │
+├─────────────────────────────────────────────────────────────────────┤
+│  Mesh Info: Triangles: 125432, Size: 12.5 × 8.3 × 6.2 mm            │
+├─────────────────────────────────────────────────────────────────────┤
+│                                          [Cancel]    [Import]       │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-### 3D Preview
+### 3D Preview Views
 
-The left panel shows an interactive 3D view of your mesh:
+The dialog shows **three synchronized 3D views** of your mesh:
 
-- **Rotate**: Click and drag to rotate the object
+| View | Position | Camera Direction | Shows |
+|------|----------|------------------|-------|
+| **Free** | Top-left | Interactive | Full 3D rotation |
+| **YZ Plane** | Top-right | Along X axis | Side view (YZ plane in screen) |
+| **XZ Plane** | Bottom-left | Along Y axis | Front view (XZ plane in screen) |
+
+All three views are **synchronized**: rotating the mesh in any view updates all others. This helps you understand the 3D orientation from multiple angles simultaneously.
+
+**Mouse controls** (in any 3D view):
+- **Rotate**: Click and drag on the mesh to rotate it
 - **Zoom**: Use the mouse scroll wheel
-- **Reference grid**: A gray XY grid helps visualize the projection plane
+- **Reference grid**: A gray XY grid shows the projection plane (fixed, cannot be moved)
 - **Axes widget**: Shows the current orientation (Red=X, Green=Y, Blue=Z)
 
-The mesh rotates around its center. The Z-axis (blue) indicates the projection direction.
+The mesh is **automatically centered at the origin** when loaded, so rotations always occur around the object's center. This makes orientation more intuitive. The Z-axis (blue) indicates the projection direction.
 
 ### 2D Projection Preview
 
-The right panel shows a preview of the resulting heightmap:
+The bottom-right panel shows a preview of the resulting heightmap:
 
 - **Shaded image**: Uses Graycast shading by default (same as main application)
+- **Update Preview button**: Click to manually refresh the 2D preview
 - **Size**: Dimensions of the output image in pixels
 - **Coverage**: Percentage of pixels that contain valid data
+
+**Preview updates:**
+- **Automatic**: The preview updates automatically after you stop interacting with the 3D views (500ms delay)
+- **Manual**: Click "Update Preview" to force an immediate refresh
 
 The preview uses **Graycast shading** (enabled by default) which shows surface topology through Sobel-based shaded relief rendering. This makes it easier to evaluate the orientation. You can disable Graycast via the checkbox to see a simple linear grayscale preview instead.
 
@@ -170,7 +190,7 @@ The sliders update automatically when you rotate the mesh in the 3D view.
 |---------|-------------|
 | **Resolution** | Pixel size in mm/pixel (smaller = finer detail, larger image) |
 | **Copy from** | Copy resolution from an already-open image (for consistent pixel sizes) |
-| **Auto size** | Automatically calculate image dimensions from mesh bounds |
+| **Auto size** | When checked, image dimensions are calculated automatically from mesh bounds and resolution. When unchecked, uses fixed 512×512 dimensions (may crop or leave empty space). |
 | **Graycast shading** | Enable shaded relief preview (recommended for orientation) |
 
 Default resolution is 0.025 mm/pixel (25 µm), suitable for most dental applications. This default can be changed in **Match → Parameters** (Global Parameters dialog).
@@ -280,9 +300,10 @@ Higher resolution (smaller mm/pixel) produces larger images but captures finer d
 ### During Import
 
 1. **Start with Quick Alignment**: Use Top/Bottom/Front/Back to get initial orientation
-2. **Watch the 2D preview**: It updates in real-time as you rotate
-3. **Aim for maximum coverage**: Higher coverage means less data loss
-4. **Use consistent orientation**: For comparative studies, orient all scans the same way
+2. **Use the multiple views**: The three synchronized 3D views help you understand the orientation from different angles
+3. **Watch the 2D preview**: It auto-updates after you stop rotating, or click "Update Preview"
+4. **Aim for maximum coverage**: Higher coverage means less data loss
+5. **Use consistent orientation**: For comparative studies, orient all scans the same way
 
 ### After Import
 

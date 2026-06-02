@@ -30,6 +30,7 @@ class QDoubleSpinBox;
 class QCheckBox;
 class QPushButton;
 class QComboBox;
+class QTimer;
 
 struct AppSettings;
 
@@ -85,6 +86,10 @@ private slots:
     void onQuickAlignClicked();
     void updateProjectionPreview();
     void onImportClicked();
+    void onInteractionStarted();
+    void onInteractionEnded();
+    void onUpdatePreviewClicked();
+    void onIdleTimeout();
 
 private:
     void setupUI();
@@ -99,10 +104,21 @@ private:
     Eigen::Matrix4d m_currentTransform = Eigen::Matrix4d::Identity();
 
     // ── Widgets ──────────────────────────────────────────────────────────────
-    STLPreviewWidget* m_preview3D = nullptr;
+    // 3D preview widgets (synchronized)
+    STLPreviewWidget* m_preview3D_main = nullptr;   // Free rotation
+    STLPreviewWidget* m_preview3D_yz = nullptr;     // YZ plane view (along X)
+    STLPreviewWidget* m_preview3D_xz = nullptr;     // XZ plane view (along Y)
+
+    // 2D projection preview
     QLabel* m_preview2D = nullptr;
+    QPushButton* m_btnUpdatePreview = nullptr;
     QLabel* m_meshInfo = nullptr;
     QLabel* m_projectionInfo = nullptr;
+
+    // Idle detection timer for auto-update
+    QTimer* m_idleTimer = nullptr;
+    bool m_isInteracting = false;
+    static constexpr int IDLE_TIMEOUT_MS = 500;  // Auto-update after 500ms idle
 
     // Rotation sliders
     QSlider* m_sliderX = nullptr;

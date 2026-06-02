@@ -26,6 +26,14 @@ class vtkTransform;
 class vtkAxesActor;
 class vtkOrientationMarkerWidget;
 
+/// Camera view direction for fixed orthographic views
+enum class CameraView {
+    Free,   ///< Interactive free rotation (default)
+    XY,     ///< Looking down Z axis (XY plane in screen)
+    YZ,     ///< Looking along X axis (YZ plane in screen)
+    XZ      ///< Looking along Y axis (XZ plane in screen)
+};
+
 /**
  * @brief Interactive 3D preview widget for STL orientation
  *
@@ -34,6 +42,7 @@ class vtkOrientationMarkerWidget;
  * - XY reference plane visualization
  * - Coordinate axes display
  * - Transformation matrix export for projection
+ * - Fixed camera views for orthographic projections (YZ, XZ planes)
  *
  * Mouse controls:
  * - Left drag: Rotate object
@@ -66,6 +75,23 @@ public:
     /// Center the mesh in view
     void centerMesh();
 
+    // ── Camera view control ───────────────────────────────────────────────────
+
+    /// Set fixed camera view direction
+    void setCameraView(CameraView view);
+
+    /// Get current camera view mode
+    CameraView getCameraView() const { return m_cameraView; }
+
+    /// Apply object transform from external source (for synchronization)
+    void setObjectTransform(double rx, double ry, double rz);
+
+    /// Enable/disable user interaction
+    void setInteractive(bool interactive);
+
+    /// Sync actor's mouse-driven rotation to our internal transform (called by callbacks)
+    void syncActorRotation();
+
     // ── Quick alignment presets ──────────────────────────────────────────────
 
     void setViewTop();      ///< View from +Z (occlusal view, default)
@@ -89,6 +115,12 @@ signals:
     /// Emitted whenever the object transformation changes
     void transformChanged(const Eigen::Matrix4d& transform);
 
+    /// Emitted when user starts interacting (mouse press)
+    void interactionStarted();
+
+    /// Emitted when user stops interacting (mouse release)
+    void interactionEnded();
+
 protected:
     void resizeEvent(QResizeEvent* event) override;
 
@@ -98,6 +130,7 @@ private:
     void setupAxesWidget();
     void updateMeshActor();
     void emitTransformChanged();
+    void applyCameraView();
 
     // Convert CGAL mesh to VTK polydata
     void cgalToVTK(const mesh3d::SurfaceMesh& mesh, vtkPolyData* polyData);
@@ -117,4 +150,7 @@ private:
     double m_rotX = 0.0;
     double m_rotY = 0.0;
     double m_rotZ = 0.0;
+
+    // Camera view mode
+    CameraView m_cameraView = CameraView::Free;
 };

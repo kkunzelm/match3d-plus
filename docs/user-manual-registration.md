@@ -270,6 +270,8 @@ After registration, you can compute and visualize the height differences.
 2. Click **Diff Image**
 3. A new window opens showing the difference image
 
+The difference image automatically opens with **FalseColor** display style for optimal visualization. You can change the display style via the View menu if needed.
+
 ### What the colors mean:
 
 The difference image uses a **red-black-white** color scale:

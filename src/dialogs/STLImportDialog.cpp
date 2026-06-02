@@ -14,6 +14,7 @@
 #include <QDoubleSpinBox>
 #include <QFileInfo>
 #include <QFormLayout>
+#include <QGridLayout>
 #include <QGroupBox>
 #include <QLabel>
 #include <QMessageBox>
@@ -21,6 +22,7 @@
 #include <QPushButton>
 #include <QSlider>
 #include <QSplitter>
+#include <QTimer>
 
 // ── Constructor ──────────────────────────────────────────────────────────────
 
@@ -47,37 +49,72 @@ void STLImportDialog::setupUI()
 {
     auto* mainLayout = new QVBoxLayout(this);
 
-    // ── Splitter: 3D preview | 2D preview ────────────────────────────────────
-    auto* splitter = new QSplitter(Qt::Horizontal, this);
+    // ── Create idle timer for auto-update ────────────────────────────────────
+    m_idleTimer = new QTimer(this);
+    m_idleTimer->setSingleShot(true);
+    connect(m_idleTimer, &QTimer::timeout, this, &STLImportDialog::onIdleTimeout);
 
-    // Left: 3D preview
-    m_preview3D = new STLPreviewWidget(this);
-    splitter->addWidget(m_preview3D);
+    // ── Four-view layout: 3 x 3D views + 1 x 2D preview ──────────────────────
+    auto* viewsWidget = new QWidget(this);
+    auto* viewsLayout = new QGridLayout(viewsWidget);
+    viewsLayout->setSpacing(5);
 
-    // Right: 2D preview + controls
-    auto* rightPanel = new QWidget(this);
-    auto* rightLayout = new QVBoxLayout(rightPanel);
-    rightLayout->setContentsMargins(5, 5, 5, 5);
+    // Top-left: Main 3D preview (free rotation)
+    auto* main3DGroup = new QGroupBox(tr("3D Preview (Free)"), viewsWidget);
+    auto* main3DLayout = new QVBoxLayout(main3DGroup);
+    main3DLayout->setContentsMargins(2, 2, 2, 2);
+    m_preview3D_main = new STLPreviewWidget(main3DGroup);
+    m_preview3D_main->setCameraView(CameraView::Free);
+    main3DLayout->addWidget(m_preview3D_main);
+    viewsLayout->addWidget(main3DGroup, 0, 0);
 
-    // 2D projection preview
-    auto* preview2DGroup = new QGroupBox(tr("2D Projection Preview"), rightPanel);
+    // Top-right: YZ plane view (looking along X axis)
+    auto* yz3DGroup = new QGroupBox(tr("YZ Plane (Side)"), viewsWidget);
+    auto* yz3DLayout = new QVBoxLayout(yz3DGroup);
+    yz3DLayout->setContentsMargins(2, 2, 2, 2);
+    m_preview3D_yz = new STLPreviewWidget(yz3DGroup);
+    m_preview3D_yz->setCameraView(CameraView::YZ);
+    yz3DLayout->addWidget(m_preview3D_yz);
+    viewsLayout->addWidget(yz3DGroup, 0, 1);
+
+    // Bottom-left: XZ plane view (looking along Y axis)
+    auto* xz3DGroup = new QGroupBox(tr("XZ Plane (Front)"), viewsWidget);
+    auto* xz3DLayout = new QVBoxLayout(xz3DGroup);
+    xz3DLayout->setContentsMargins(2, 2, 2, 2);
+    m_preview3D_xz = new STLPreviewWidget(xz3DGroup);
+    m_preview3D_xz->setCameraView(CameraView::XZ);
+    xz3DLayout->addWidget(m_preview3D_xz);
+    viewsLayout->addWidget(xz3DGroup, 1, 0);
+
+    // Bottom-right: 2D projection preview
+    auto* preview2DGroup = new QGroupBox(tr("2D Projection Preview"), viewsWidget);
     auto* preview2DLayout = new QVBoxLayout(preview2DGroup);
+    preview2DLayout->setContentsMargins(2, 2, 2, 2);
+
     m_preview2D = new QLabel(preview2DGroup);
-    m_preview2D->setMinimumSize(300, 300);
+    m_preview2D->setMinimumSize(250, 250);
     m_preview2D->setAlignment(Qt::AlignCenter);
     m_preview2D->setStyleSheet("background-color: #333; border: 1px solid #666;");
-    preview2DLayout->addWidget(m_preview2D);
-    rightLayout->addWidget(preview2DGroup);
+    preview2DLayout->addWidget(m_preview2D, 1);
+
+    // Update button for 2D preview
+    m_btnUpdatePreview = new QPushButton(tr("Update Preview"), preview2DGroup);
+    connect(m_btnUpdatePreview, &QPushButton::clicked, this, &STLImportDialog::onUpdatePreviewClicked);
+    preview2DLayout->addWidget(m_btnUpdatePreview);
 
     // Projection info
-    m_projectionInfo = new QLabel(tr("No projection yet"), rightPanel);
-    rightLayout->addWidget(m_projectionInfo);
+    m_projectionInfo = new QLabel(tr("No projection yet"), preview2DGroup);
+    preview2DLayout->addWidget(m_projectionInfo);
 
-    rightLayout->addStretch();
-    splitter->addWidget(rightPanel);
+    viewsLayout->addWidget(preview2DGroup, 1, 1);
 
-    splitter->setSizes({700, 400});
-    mainLayout->addWidget(splitter, 1);
+    // Set equal column/row stretch
+    viewsLayout->setColumnStretch(0, 1);
+    viewsLayout->setColumnStretch(1, 1);
+    viewsLayout->setRowStretch(0, 1);
+    viewsLayout->setRowStretch(1, 1);
+
+    mainLayout->addWidget(viewsWidget, 1);
 
     // ── Controls below splitter ──────────────────────────────────────────────
     auto* controlsLayout = new QHBoxLayout();
@@ -202,9 +239,30 @@ void STLImportDialog::setupUI()
 
     mainLayout->addWidget(buttonBox);
 
-    // Connect 3D preview transform changes
-    connect(m_preview3D, &STLPreviewWidget::transformChanged,
+    // ── Connect 3D preview signals ───────────────────────────────────────────
+    // Main preview: transform changes propagate to other views
+    connect(m_preview3D_main, &STLPreviewWidget::transformChanged,
             this, &STLImportDialog::onTransformChanged);
+    connect(m_preview3D_main, &STLPreviewWidget::interactionStarted,
+            this, &STLImportDialog::onInteractionStarted);
+    connect(m_preview3D_main, &STLPreviewWidget::interactionEnded,
+            this, &STLImportDialog::onInteractionEnded);
+
+    // YZ view: also allows rotation, syncs to others
+    connect(m_preview3D_yz, &STLPreviewWidget::transformChanged,
+            this, &STLImportDialog::onTransformChanged);
+    connect(m_preview3D_yz, &STLPreviewWidget::interactionStarted,
+            this, &STLImportDialog::onInteractionStarted);
+    connect(m_preview3D_yz, &STLPreviewWidget::interactionEnded,
+            this, &STLImportDialog::onInteractionEnded);
+
+    // XZ view: also allows rotation, syncs to others
+    connect(m_preview3D_xz, &STLPreviewWidget::transformChanged,
+            this, &STLImportDialog::onTransformChanged);
+    connect(m_preview3D_xz, &STLPreviewWidget::interactionStarted,
+            this, &STLImportDialog::onInteractionStarted);
+    connect(m_preview3D_xz, &STLPreviewWidget::interactionEnded,
+            this, &STLImportDialog::onInteractionEnded);
 }
 
 // ── STL Loading ──────────────────────────────────────────────────────────────
@@ -219,7 +277,11 @@ void STLImportDialog::loadSTL()
         return;
     }
 
-    m_preview3D->setMesh(m_mesh);
+    // Set mesh in all three 3D views
+    m_preview3D_main->setMesh(m_mesh);
+    m_preview3D_yz->setMesh(m_mesh);
+    m_preview3D_xz->setMesh(m_mesh);
+
     updateMeshInfo();
     m_btnImport->setEnabled(true);
 
@@ -250,9 +312,27 @@ void STLImportDialog::onTransformChanged(const Eigen::Matrix4d& transform)
 {
     m_currentTransform = transform;
 
-    // Update slider values to match (extract Euler angles)
+    // Determine which widget sent the signal
+    auto* sender = qobject_cast<STLPreviewWidget*>(QObject::sender());
+
+    // Get rotation from the sender widget
     double rx, ry, rz;
-    m_preview3D->getRotation(rx, ry, rz);
+    if (sender) {
+        sender->getRotation(rx, ry, rz);
+    } else {
+        m_preview3D_main->getRotation(rx, ry, rz);
+    }
+
+    // Sync rotation to all other 3D views (without triggering their signals)
+    if (sender != m_preview3D_main) {
+        m_preview3D_main->setObjectTransform(rx, ry, rz);
+    }
+    if (sender != m_preview3D_yz) {
+        m_preview3D_yz->setObjectTransform(rx, ry, rz);
+    }
+    if (sender != m_preview3D_xz) {
+        m_preview3D_xz->setObjectTransform(rx, ry, rz);
+    }
 
     // Block signals to avoid feedback loop
     m_sliderX->blockSignals(true);
@@ -271,7 +351,8 @@ void STLImportDialog::onTransformChanged(const Eigen::Matrix4d& transform)
     m_labelRotY->setText(QString("%1°").arg(static_cast<int>(ry)));
     m_labelRotZ->setText(QString("%1°").arg(static_cast<int>(rz)));
 
-    updateProjectionPreview();
+    // Don't update projection preview immediately during interaction
+    // It will be updated by the idle timer or update button
 }
 
 void STLImportDialog::onRotationSliderChanged()
@@ -284,7 +365,13 @@ void STLImportDialog::onRotationSliderChanged()
     m_labelRotY->setText(QString("%1°").arg(static_cast<int>(ry)));
     m_labelRotZ->setText(QString("%1°").arg(static_cast<int>(rz)));
 
-    m_preview3D->setRotation(rx, ry, rz);
+    // Update all three 3D views
+    m_preview3D_main->setRotation(rx, ry, rz);
+    m_preview3D_yz->setObjectTransform(rx, ry, rz);
+    m_preview3D_xz->setObjectTransform(rx, ry, rz);
+
+    // Update projection preview (sliders are not "interactive" so update immediately)
+    updateProjectionPreview();
 }
 
 void STLImportDialog::onResolutionChanged()
@@ -301,14 +388,18 @@ void STLImportDialog::onQuickAlignClicked()
     QString text = btn->text();
 
     // Compare against both translated and untranslated strings
-    if (text == tr("Top") || text == "Top")           m_preview3D->setViewTop();
-    else if (text == tr("Bottom") || text == "Bottom") m_preview3D->setViewBottom();
-    else if (text == tr("Front") || text == "Front")   m_preview3D->setViewFront();
-    else if (text == tr("Back") || text == "Back")     m_preview3D->setViewBack();
-    else if (text == tr("90X") || text == "90X")       m_preview3D->rotateX90();
-    else if (text == tr("90Y") || text == "90Y")       m_preview3D->rotateY90();
-    else if (text == tr("90Z") || text == "90Z")       m_preview3D->rotateZ90();
-    else if (text == tr("Reset") || text == "Reset")   m_preview3D->resetTransform();
+    // These will trigger onTransformChanged which syncs all views
+    if (text == tr("Top") || text == "Top")           m_preview3D_main->setViewTop();
+    else if (text == tr("Bottom") || text == "Bottom") m_preview3D_main->setViewBottom();
+    else if (text == tr("Front") || text == "Front")   m_preview3D_main->setViewFront();
+    else if (text == tr("Back") || text == "Back")     m_preview3D_main->setViewBack();
+    else if (text == tr("90X") || text == "90X")       m_preview3D_main->rotateX90();
+    else if (text == tr("90Y") || text == "90Y")       m_preview3D_main->rotateY90();
+    else if (text == tr("90Z") || text == "90Z")       m_preview3D_main->rotateZ90();
+    else if (text == tr("Reset") || text == "Reset")   m_preview3D_main->resetTransform();
+
+    // Update projection after quick align
+    updateProjectionPreview();
 }
 
 void STLImportDialog::updateProjectionPreview()
@@ -393,12 +484,11 @@ QImage STLImportDialog::renderGraycast(const ViffImage& img, float zMin, float z
             gx /= (8.0 * refPxSize);
             gy /= (8.0 * refPxSize);
 
-            // Lambertian shading with zenith light
+            // Lambertian shading with zenith light (matches main application)
             const double theta = std::atan(std::sqrt(gx * gx + gy * gy));
             const float cos_v = static_cast<float>(std::cos(theta));
-            // Invert: flat surfaces dark, steep slopes bright (dental convention)
-            int gray = (cos_v < 1.0f) ? static_cast<int>((1.0f - cos_v) * 255.0f) : 0;
-            // Alternative: int gray = static_cast<int>(cos_v * 255.0f);  // flat=bright
+            // Flat surfaces bright, steep slopes dark
+            int gray = (cos_v < 1.0f) ? static_cast<int>(cos_v * 255.0f) : 0;
 
             line[c] = qRgb(gray, gray, gray);
         }
@@ -441,6 +531,32 @@ void STLImportDialog::onImportClicked()
 {
     createProjection();
     accept();
+}
+
+void STLImportDialog::onInteractionStarted()
+{
+    m_isInteracting = true;
+    m_idleTimer->stop();
+}
+
+void STLImportDialog::onInteractionEnded()
+{
+    m_isInteracting = false;
+    // Start idle timer - will trigger auto-update after timeout
+    m_idleTimer->start(IDLE_TIMEOUT_MS);
+}
+
+void STLImportDialog::onUpdatePreviewClicked()
+{
+    updateProjectionPreview();
+}
+
+void STLImportDialog::onIdleTimeout()
+{
+    // Only update if not currently interacting
+    if (!m_isInteracting) {
+        updateProjectionPreview();
+    }
 }
 
 void STLImportDialog::createProjection()

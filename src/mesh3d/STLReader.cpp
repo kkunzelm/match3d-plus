@@ -135,6 +135,27 @@ std::shared_ptr<MeshData> readSTL(const std::string& filePath, std::string& erro
         }
     }
 
+    // ── Center mesh at origin ───────────────────────────────────────────────
+    // Translate all vertices so the centroid (center of bounding box) is at origin.
+    // This makes rotations more intuitive as they occur around the object's center.
+    // For difference images, relative values matter more than absolute positions.
+    double cx = (meshData->boundsMin[0] + meshData->boundsMax[0]) / 2.0;
+    double cy = (meshData->boundsMin[1] + meshData->boundsMax[1]) / 2.0;
+    double cz = (meshData->boundsMin[2] + meshData->boundsMax[2]) / 2.0;
+
+    for (auto v : meshData->mesh.vertices()) {
+        Point3& p = meshData->mesh.point(v);
+        p = Point3(p.x() - cx, p.y() - cy, p.z() - cz);
+    }
+
+    // Update bounding box to reflect centered mesh
+    meshData->boundsMin[0] -= cx;
+    meshData->boundsMin[1] -= cy;
+    meshData->boundsMin[2] -= cz;
+    meshData->boundsMax[0] -= cx;
+    meshData->boundsMax[1] -= cy;
+    meshData->boundsMax[2] -= cz;
+
     return meshData;
 }
 

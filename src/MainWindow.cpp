@@ -19,6 +19,7 @@
 
 #include "MainWindow.h"
 #include "ImageWindow.h"
+#include "DepthImageView.h"
 #include "dialogs/GlobalParametersDialog.h"
 #include "io/PlyIO.h"
 #include "io/ViffReader.h"
@@ -252,6 +253,7 @@ void MainWindow::openFile(const QString& path) {
 void MainWindow::openImageWindow(ViffImage img, const QString& title,
                                   const RoiMask* roiMask) {
     const int idx = nextIndex_++;
+    const bool isDiff = img.isDiffImage;
     auto* win = new ImageWindow(idx, title, std::move(img));
     win->setMainWindow(this);
     connect(win, &ImageWindow::windowClosing, this, &MainWindow::onImageWindowClosing);
@@ -259,6 +261,11 @@ void MainWindow::openImageWindow(ViffImage img, const QString& title,
     // Copy ROI mask if provided
     if (roiMask && !roiMask->isEmpty())
         win->setRoiMask(*roiMask);
+
+    // Default difference images to FalseColor style for better visualization
+    if (isDiff && win->depthView()) {
+        win->depthView()->setStyle(ImageWindow::Style::FalseColor);
+    }
 
     if (idx >= imageWindows_.size())
         imageWindows_.resize(idx + 1, nullptr);
