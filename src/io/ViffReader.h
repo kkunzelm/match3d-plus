@@ -65,11 +65,14 @@ static_assert(sizeof(ViffHeader) == 1024, "ViffHeader must be exactly 1024 bytes
 // Depth image loaded from a VIFF/XV file.
 // Khoros header stores width in numberOfRows and height in numberOfColumns (inverted names).
 // ViffImage corrects for this: rows=height, cols=width, data[row*cols+col].
+//
+// Note: ViffReader auto-converts pixel sizes from metres to mm (see ViffReader.cpp).
+// MeshProjection also stores pixel sizes in mm. All internal usage is in mm.
 struct ViffImage {
     uint32_t rows = 0;        // Image height (= header.numberOfColumns)
     uint32_t cols = 0;        // Image width  (= header.numberOfRows)
-    float    xPixelSize = 0;  // Metres per pixel
-    float    yPixelSize = 0;
+    float    xPixelSize = 0;  // mm per pixel (ViffReader converts from metres)
+    float    yPixelSize = 0;  // mm per pixel
     float    originX = 0;     // FSpare1
     float    originY = 0;     // FSpare2
     std::vector<float> data;  // Row-major: data[row * cols + col]

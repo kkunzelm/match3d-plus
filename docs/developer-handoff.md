@@ -379,6 +379,18 @@ QString s = tr("Size: %.2f × %.2f × %.2f mm")
     .arg(x, 0, 'f', 2)  // These won't match %.2f
 ```
 
+### ViffImage Pixel Size Units
+
+The VIFF file format stores pixel sizes in **metres**, but `ViffReader` auto-converts to **mm** for practical use. Similarly, `MeshProjection` stores pixel sizes in mm. All internal ViffImage usage should assume **mm**:
+
+```cpp
+// CORRECT - ViffImage stores mm
+float pixelSize_mm = img.xPixelSize;
+
+// WRONG - don't multiply by 1000 (it's already mm)
+float pixelSize_mm = img.xPixelSize * 1000.0f;
+```
+
 ### imageWindows_ Contains Nullptr Entries
 
 `MainWindow::imageWindows_` is a sparse vector — closed windows become `nullptr`:
@@ -444,7 +456,7 @@ Each depth image opens in its own `ImageWindow`:
 
 - 1024-byte header + float32 data
 - Row-major pixel order
-- Pixel size in metres (not mm!)
+- Pixel size: VIFF header stores metres, but `ViffReader` auto-converts to **mm** for internal use
 - See `docs/viff-format.md` for full specification
 
 ### STL (Import Only)

@@ -151,7 +151,8 @@ void STLImportDialog::setupUI()
         m_comboResFrom->addItem(tr("-- Copy from --"));
         for (const auto& img : m_openImages) {
             // Show resolution as average of x and y pixel sizes
-            float avgRes = (img.xPixelSize + img.yPixelSize) / 2.0f * 1000.0f;  // Convert m to mm
+            // ViffImage.xPixelSize is already in mm (ViffReader converts to mm)
+            float avgRes = (img.xPixelSize + img.yPixelSize) / 2.0f;
             m_comboResFrom->addItem(tr("%1 (%2 mm/px)")
                 .arg(img.name)
                 .arg(static_cast<double>(avgRes), 0, 'f', 3));
@@ -160,8 +161,8 @@ void STLImportDialog::setupUI()
                 this, [this](int idx) {
             if (idx > 0 && idx <= static_cast<int>(m_openImages.size())) {
                 const auto& img = m_openImages[static_cast<size_t>(idx - 1)];
-                // Use average of x and y pixel sizes, convert from m to mm
-                float avgRes = (img.xPixelSize + img.yPixelSize) / 2.0f * 1000.0f;
+                // Use average of x and y pixel sizes (already in mm)
+                float avgRes = (img.xPixelSize + img.yPixelSize) / 2.0f;
                 m_spinResolution->setValue(static_cast<double>(avgRes));
             }
         });

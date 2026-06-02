@@ -425,7 +425,8 @@ void MainWindow::onOpenStl() {
         openImageWindow(std::move(img), title);
 
         // Update global settings with the used resolution
-        settings_.stlResolution = img.xPixelSize * 1000.0f;  // Convert m to mm
+        // ViffImage.xPixelSize is already in mm (set by MeshProjection)
+        settings_.stlResolution = img.xPixelSize;
     }
 }
 #endif
