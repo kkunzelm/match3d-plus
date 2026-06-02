@@ -23,6 +23,10 @@
 #include "io/PlyIO.h"
 #include "io/ViffReader.h"
 
+#ifdef MATCH3D_STL_IMPORT_ENABLED
+#include "dialogs/STLImportDialog.h"
+#endif
+
 #include <QAction>
 #include <QCloseEvent>
 #include <QDialog>
@@ -85,6 +89,11 @@ void MainWindow::createActions() {
     actOpenPly_ = new QAction("Open &PLY", this);
     connect(actOpenPly_, &QAction::triggered, this, &MainWindow::onOpenPly);
 
+#ifdef MATCH3D_STL_IMPORT_ENABLED
+    actOpenStl_ = new QAction("Open &STL...", this);
+    connect(actOpenStl_, &QAction::triggered, this, &MainWindow::onOpenStl);
+#endif
+
     actCloseAll_ = new QAction("Close all", this);
     connect(actCloseAll_, &QAction::triggered, this, &MainWindow::onCloseAll);
 
@@ -115,6 +124,9 @@ void MainWindow::createMenus() {
     auto* fileMenu = menuBar()->addMenu("&File");
     fileMenu->addAction(actOpenViff_);
     fileMenu->addAction(actOpenPly_);
+#ifdef MATCH3D_STL_IMPORT_ENABLED
+    fileMenu->addAction(actOpenStl_);
+#endif
     fileMenu->addSeparator();
     fileMenu->addAction(actCloseAll_);
     fileMenu->addSeparator();
@@ -384,3 +396,37 @@ QVector<ImageWindow*> MainWindow::selectedPair() const {
         return {w1, w2};
     return imageWindows();  // fallback: both lists need a selection
 }
+
+#ifdef MATCH3D_STL_IMPORT_ENABLED
+void MainWindow::onOpenStl() {
+    const QString path = QFileDialog::getOpenFileName(
+        this, tr("Open STL"), lastDir_,
+        tr("STL Files (*.stl);;All Files (*)"));
+
+    if (path.isEmpty()) return;
+
+    lastDir_ = QFileInfo(path).absolutePath();
+
+    // Collect info about open images for "copy resolution from" feature
+    std::vector<OpenImageInfo> openImgInfos;
+    for (const auto* w : imageWindows_) {
+        if (!w) continue;  // Skip closed windows (nullptr entries)
+        OpenImageInfo info;
+        info.name = QFileInfo(w->imagePath()).fileName();
+        info.xPixelSize = w->image().xPixelSize;
+        info.yPixelSize = w->image().yPixelSize;
+        openImgInfos.push_back(info);
+    }
+
+    STLImportDialog dlg(path, &settings_, openImgInfos, this);
+    if (dlg.exec() == QDialog::Accepted && dlg.isValid()) {
+        ViffImage img = dlg.getProjectedImage();
+        QString title = QFileInfo(path).fileName() + " (projected)";
+        openImageWindow(std::move(img), title);
+
+        // Update global settings with the used resolution
+        // ViffImage.xPixelSize is already in mm (set by MeshProjection)
+        settings_.stlResolution = img.xPixelSize;
+    }
+}
+#endif

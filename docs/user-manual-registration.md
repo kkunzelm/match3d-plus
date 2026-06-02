@@ -67,11 +67,21 @@ Match3D+ is designed to compare two 3D surface scans (heightmaps) by:
 
 ## Loading Images
 
-### Opening Images
+### Opening VIFF Images
 
 1. Go to **File → Open** or use the toolbar
 2. Select a VIFF (.xv) file containing 3D depth data
 3. The image will open in a new window
+
+### Importing STL Files
+
+If your data comes from an intraoral scanner (STL format):
+
+1. Go to **File → Import STL...**
+2. Orient the mesh in the 3D preview (occlusal surface facing up)
+3. Click **Import** to create a heightmap
+
+See [User Manual: STL Import](user-manual-stl-import.md) for detailed instructions.
 
 ### Designating Reference and Data
 
