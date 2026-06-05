@@ -39,9 +39,13 @@ ui_*.h
 .cache/
 compile_commands.json
 
-# Project-specific: docs (ignore all except user-* files)
+# Project-specific: docs (ignore all except user-* and selected technical docs)
 docs/*
 !docs/user-*
+!docs/surface-fitting-technical.md
+!docs/registration-strategies.md
+!docs/synthetic-test-data.md
+!docs/viff-format.md
 
 # Project-specific: initial prompt
 first-prompt.txt
