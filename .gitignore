@@ -39,22 +39,16 @@ ui_*.h
 .cache/
 compile_commands.json
 
-# Project-specific: planning/spec docs
-docs/gui-specification.md
-docs/implementation-strategy.md
-docs/registration-strategies.md
-docs/viff-format.md
+# Project-specific: docs (ignore all except user-* files)
+docs/*
+!docs/user-*
 
 # Project-specific: initial prompt
 first-prompt.txt
-docs/info-All-Roi-selection-stained-or-white.txt
-docs/info*
-
 
 # Project-specific: internal reference material
 data/Information/
 data/3d-data/*.java
-docs/screenshots/
 
 # LaTeX auxiliary files
 *.aux
